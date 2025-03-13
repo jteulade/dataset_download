@@ -1,0 +1,10 @@
+/downloads/
+/data/
+/results/
+/maps/
+/__pycache__/
+*.py[cod]
+copernicus_dataspace_token.json
+*.env
+.DS_Store
+*.swp

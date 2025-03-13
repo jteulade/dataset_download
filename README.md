@@ -1,0 +1,239 @@
+# Sentinel Tile Downloader
+
+A Python script for downloading Sentinel-2 tiles by their ID from the Copernicus Data Space API.
+
+## Prerequisites
+
+- Python 3.6 or higher
+- Required Python packages: `requests`
+
+## Installation
+
+1. Clone or download this repository
+2. Install the required packages:
+   ```
+   pip install requests
+   ```
+3. Make the script executable:
+   ```
+   chmod +x sentinel_tile_downloader.py
+   ```
+
+## Authentication
+
+To download tiles, you need a valid Copernicus Data Space API token. Follow these steps:
+
+1. Register for an account at [Copernicus Data Space Ecosystem](https://dataspace.copernicus.eu/)
+2. Generate an API token from your account
+3. Create a token file using the provided template:
+   ```
+   cp copernicus_dataspace_token_template.json ~/copernicus_dataspace_token.json
+   ```
+4. Edit the token file and replace the placeholder values with your actual tokens
+
+## Usage
+
+### Basic Usage
+
+```bash
+./sentinel_tile_downloader.py --tile-id "TILE_ID" --year-filter "YEAR"
+```
+
+### Finding Available Tiles
+
+If you're not sure which tile IDs are available, use the `--list-available` flag:
+
+```bash
+./sentinel_tile_downloader.py --tile-id "any" --year-filter "2022" --list-available
+```
+
+This will show you examples of available tile IDs for the specified year.
+
+### All Options
+
+```bash
+./sentinel_tile_downloader.py --tile-id "TILE_ID" 
+                             [--year-filter "YEAR"] 
+                             [--output-dir "DIRECTORY"] 
+                             [--token-file "PATH_TO_TOKEN_FILE"]
+                             [--debug]
+                             [--list-available]
+```
+
+- `--tile-id`: The Sentinel-2 tile ID to download (required)
+- `--year-filter`: Year to filter for (e.g., '2022') (optional)
+- `--output-dir`: Directory to save downloaded files (default: "downloads")
+- `--token-file`: Path to the Copernicus Data Space token file (optional)
+- `--debug`: Enable debug logging
+- `--list-available`: List available tiles when the specified tile ID is not found
+
+## Examples
+
+### Download a specific tile for 2022
+
+```bash
+./sentinel_tile_downloader.py --tile-id "11SMB" --year-filter "2022"
+```
+
+### List available tiles for 2023
+
+```bash
+./sentinel_tile_downloader.py --tile-id "any" --year-filter "2023" --list-available
+```
+
+### Download with a custom token file location
+
+```bash
+./sentinel_tile_downloader.py --tile-id "11SMB" --token-file "/path/to/token.json"
+```
+
+## Troubleshooting
+
+If you're having issues with land detection:
+
+1. Try downloading the land polygon data:
+
+```bash
+python download_land_polygons.py
+```
+
+2. If too many points are being skipped, you can:
+   - Increase the number of attempts with `--max-land-attempts 30`
+   - Disable land detection with `--ensure-on-land=False`
+
+## License
+
+This project is open source and available under the MIT License.
+
+# Sentinel City Explorer
+
+This tool queries Sentinel-2 Global Mosaics data for geographically dispersed cities and random points near those cities, then visualizes the results on an interactive map.
+
+## Features
+
+- Select geographically dispersed cities from a CSV file
+- Query Sentinel-2 Global Mosaics data for each city
+- Generate random points at a specified distance from each city
+- Detect whether points are on land or in water
+- Select the best (closest) tile for each location
+- Create an interactive map showing cities, random points, and their associated tiles
+- Multiple base maps including satellite view for better visualization
+
+## Installation
+
+1. Clone this repository
+2. Install the required dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+3. Download the land polygon data (optional but recommended):
+
+```bash
+python download_land_polygons.py
+```
+
+## Usage
+
+Basic usage:
+
+```bash
+python sentinel_city_explorer.py --cities-csv path/to/worldcities.csv
+```
+
+Advanced usage:
+
+```bash
+python sentinel_city_explorer.py \
+  --cities-csv path/to/worldcities.csv \
+  --population-min 100000 \
+  --num-cities 200 \
+  --random-distance 100 \
+  --ensure-on-land \
+  --max-land-attempts 20 \
+  --download-land-data
+```
+
+## Command-line Arguments
+
+- `--cities-csv`: Path to the CSV file containing city data (required)
+- `--num-cities`: Number of geographically dispersed cities to select (default: 20)
+- `--population-min`: Minimum population threshold for cities (default: 500000)
+- `--start-date`: Start date in format YYYY-MM-DD (default: based on year-filter)
+- `--end-date`: End date in format YYYY-MM-DD (default: based on year-filter)
+- `--max-records`: Maximum number of tiles to return per city (default: 10)
+- `--output-dir`: Directory to save output files (default: "results")
+- `--output-map`: Path to save the HTML map file (default: "maps/city_mosaics_map.html")
+- `--year-filter`: Year to filter for (default: "2022")
+- `--random-distance`: Distance in kilometers for random points from cities (default: 100)
+- `--ensure-on-land`: Only generate random points on land (default: True)
+- `--max-land-attempts`: Maximum attempts to find a random point on land (default: 10)
+- `--download-land-data`: Download land polygon data before starting
+
+## Land Detection
+
+The tool can detect whether random points are on land or in water. This is useful for ensuring that random points are only generated on land, which is more likely to have Sentinel-2 data.
+
+To use this feature:
+
+1. Download the land polygon data:
+
+```bash
+python download_land_polygons.py
+```
+
+2. Run the script with the `--ensure-on-land` flag:
+
+```bash
+python sentinel_city_explorer.py --cities-csv path/to/worldcities.csv --ensure-on-land
+```
+
+If a random point cannot be found on land after the specified number of attempts (`--max-land-attempts`), the random point will be skipped.
+
+## Output
+
+The script produces:
+
+1. A CSV file with the selected cities
+2. JSON files with the raw query results
+3. An interactive HTML map showing all the data
+
+### Map Visualization
+
+The map shows:
+- Cities as red markers
+- Random points on land as green markers
+- Random points in water as blue markers
+- Sentinel-2 tiles as colored polygons
+- Lines connecting cities to their random points
+- Multiple base maps including satellite view that can be toggled using the layer control
+
+### Tile Metadata
+
+Each Sentinel-2 tile includes the following metadata:
+
+- **Basic Information**:
+  - Title
+  - Start Date
+  - Completion Date
+  - Product Type
+  - Tile ID
+
+- **Spatial Information**:
+  - Footprint (polygon coordinates)
+  - Distance from query point
+
+- **City Association**:
+  - City Name - Name of the associated city
+  - City Coordinates - Latitude and longitude of the associated city
+  - Point Type - Whether the tile is associated with a city center or a random point
+
+- **Access Information**:
+  - Download URL
+
+This metadata is stored in the JSON files and displayed in the interactive map popups.
+
+## License
+
+This project is open source and available under the MIT License. 
