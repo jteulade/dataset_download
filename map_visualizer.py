@@ -9,6 +9,7 @@ import folium
 from folium.plugins import MeasureControl, MiniMap, MarkerCluster
 import random
 import os
+from shapely.geometry import Polygon, Point
 
 def create_mosaic_map(cities_results, output_file='maps/city_mosaics_map.html'):
     """
@@ -223,40 +224,145 @@ def create_mosaic_map(cities_results, output_file='maps/city_mosaics_map.html'):
                             print(f"Warning: Error parsing coordinate {coord_str}: {e}")
                 
                 # If no valid footprint, try to get geometry from the original feature
-                if len(coords) < 3 and 'original_feature' in feature:
-                    original_feature = feature['original_feature']
-                    if 'geometry' in original_feature and original_feature['geometry']['type'] == 'Polygon':
-                        # Get coordinates from the geometry
-                        geometry_coords = original_feature['geometry']['coordinates'][0]
-                        coords = [[coord[1], coord[0]] for coord in geometry_coords]  # Swap lon/lat to lat/lon for folium
+                if len(coords) < 3:
+                    # Try to extract geometry from the original_feature
+                    original_feature = feature.get('original_feature')
+                    if original_feature:
+                        # First try direct restoGeometry
+                        if 'restoGeometry' in original_feature:
+                            geom = original_feature['restoGeometry']
+                            if 'type' in geom and geom['type'] == 'Polygon' and 'coordinates' in geom:
+                                # Get coordinates from the geometry
+                                geometry_coords = geom['coordinates'][0]
+                                coords = [[coord[1], coord[0]] for coord in geometry_coords]  # Swap lon/lat to lat/lon for folium
+                        # Then try standard geometry
+                        elif 'geometry' in original_feature and original_feature['geometry']['type'] == 'Polygon':
+                            # Get coordinates from the geometry
+                            geometry_coords = original_feature['geometry']['coordinates'][0]
+                            coords = [[coord[1], coord[0]] for coord in geometry_coords]  # Swap lon/lat to lat/lon for folium
                 
                 # If still no valid coordinates, skip this feature
                 if len(coords) < 3:
                     print(f"Warning: Could not find valid footprint for tile {feature.get('title', 'Unknown')}")
-                    continue
+                    # Try to create a simple square around the point as fallback
+                    if result['count'] > 0:
+                        # Create a simple square around the point (approximately 20km)
+                        box_size = 0.2  # degrees, roughly 20km
+                        # Center the box on the point
+                        box_coords = [
+                            [lat - box_size, lon - box_size],
+                            [lat - box_size, lon + box_size],
+                            [lat + box_size, lon + box_size],
+                            [lat + box_size, lon - box_size],
+                            [lat - box_size, lon - box_size],
+                        ]
+                        coords = box_coords
+                        print(f"Created fallback square footprint for {feature.get('title', 'Unknown')}")
+                    else:
+                        continue
+                
+                # Check if the point is within the polygon
+                point_in_polygon = False
+                try:
+                    # Convert the coordinates to lon/lat for checking
+                    poly_coords = [(c[1], c[0]) for c in coords]  # Convert to lon/lat
+                    point = (lon, lat)  # Query point
+                    
+                    # Create a polygon and check if the point is inside
+                    polygon = Polygon(poly_coords)
+                    point_in_polygon = polygon.contains(Point(point))
+                    
+                    if not point_in_polygon and is_random_point:
+                        print(f"Warning: Random point {lat}, {lon} is not within its tile footprint")
+                        
+                        # Calculate the distance from the point to the polygon
+                        from shapely.ops import nearest_points
+                        point_shape = Point(point)
+                        nearest_point = nearest_points(point_shape, polygon)[1]
+                        
+                        # Calculate distance in kilometers
+                        import math
+                        lon1, lat1 = point
+                        lon2, lat2 = nearest_point.x, nearest_point.y
+                        
+                        # Convert to radians
+                        lon1, lat1, lon2, lat2 = map(math.radians, [lon1, lat1, lon2, lat2])
+                        
+                        # Haversine formula
+                        dlon = lon2 - lon1
+                        dlat = lat2 - lat1
+                        a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+                        c = 2 * math.asin(math.sqrt(a))
+                        r = 6371  # Radius of Earth in kilometers
+                        distance_to_tile = c * r
+                        
+                        print(f"  Distance to nearest point on tile footprint: {distance_to_tile:.2f} km")
+                except Exception as e:
+                    print(f"Error checking if point is in polygon: {e}")
                 
                 # Choose a color and style based on the index and whether it's a random point
                 if is_random_point:
                     # Choose color based on land/water status
                     is_on_land = result.get('is_on_land', True)
-                    color = 'green' if is_on_land else 'blue'
+                    base_color = 'green' if is_on_land else 'blue'
+                    
+                    # Use a different style if the point is not within the polygon
+                    if not point_in_polygon:
+                        color = f"dark{base_color}"
+                        dash_array = '5, 5'
+                        fill_opacity = 0.3
+                        # Add a line connecting the random point to the nearest point on the polygon
+                        try:
+                            from shapely.ops import nearest_points
+                            point_shape = Point(point)
+                            nearest_point = nearest_points(point_shape, polygon)[1]
+                            
+                            # Add a line to the nearest point on the polygon boundary
+                            folium.PolyLine(
+                                locations=[[lat, lon], [nearest_point.y, nearest_point.x]],
+                                color='red',
+                                weight=2,
+                                opacity=0.7,
+                                popup='Distance to tile boundary',
+                                dash_array='3, 3'
+                            ).add_to(tile_group)
+                        except Exception as e:
+                            print(f"Error creating distance line: {e}")
+                    else:
+                        color = base_color
+                        dash_array = 'none'
+                        fill_opacity = 0.5
                 else:
                     color = tile_colors[i % len(tile_colors)]
+                    dash_array = 'none' if i == 0 else '5, 5'
+                    fill_opacity = 0.5
                     
-                dash_array = 'none' if i == 0 else '5, 5'
-                
                 # Create a popup with information about the tile
                 popup_html = f"""
                 <b>Tile Information:</b><br>
                 <b>Title:</b> {feature['title']}<br>
-                <b>Start Date:</b> {feature['start_date']}<br>
-                <b>Product Type:</b> {feature['product_type']}<br>
                 """
+                
+                if not point_in_polygon and is_random_point:
+                    popup_html += f"<b>Warning:</b> Random point is not within this tile footprint<br>"
+                    try:
+                        popup_html += f"<b>Distance to tile boundary:</b> {distance_to_tile:.2f} km<br>"
+                    except:
+                        pass
+                
+                if 'start_date' in feature:
+                    popup_html += f"<b>Start Date:</b> {feature['start_date']}<br>"
+                
+                popup_html += f"<b>Product Type:</b> {feature['product_type']}<br>"
                 
                 if feature.get('tile_id'):
                     popup_html += f"<b>Tile ID:</b> {feature['tile_id']}<br>"
                 
-                popup_html += f"<b>Distance:</b> {feature['distance_km']:.2f} km<br>"
+                if feature.get('quarterly_count'):
+                    popup_html += f"<b>Quarterly Products:</b> {feature['quarterly_count']}<br>"
+                
+                if feature.get('quarters'):
+                    popup_html += f"<b>Quarters:</b> {', '.join(feature.get('quarters', []))}<br>"
                 
                 # Add the city metadata to the popup
                 # First try to get from feature, then from result if not available
@@ -288,7 +394,7 @@ def create_mosaic_map(cities_results, output_file='maps/city_mosaics_map.html'):
                     dash_array=dash_array,
                     fill=True,
                     fill_color=color,
-                    fill_opacity=0.2,
+                    fill_opacity=fill_opacity,
                     popup=folium.Popup(popup_html, max_width=300)
                 ).add_to(tile_group)
                 

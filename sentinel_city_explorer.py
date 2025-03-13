@@ -23,18 +23,12 @@ def main():
                         help="Number of geographically dispersed cities to select")
     parser.add_argument("--population-min", type=int, default=500000,
                         help="Minimum population threshold for cities")
-    parser.add_argument("--start-date", type=str,
-                        help="Start date in format YYYY-MM-DD (default: based on year-filter)")
-    parser.add_argument("--end-date", type=str,
-                        help="End date in format YYYY-MM-DD (default: based on year-filter)")
-    parser.add_argument("--max-records", type=int, default=10,
-                        help="Maximum number of tiles to return per city (default: 10)")
     parser.add_argument("--output-dir", type=str, default="results",
                         help="Directory to save output files")
     parser.add_argument("--output-map", type=str, default="maps/city_mosaics_map.html",
                         help="Path to save the HTML map file")
-    parser.add_argument("--year-filter", type=str, default="2022",
-                        help="Year to filter for (e.g., '2022')")
+    parser.add_argument("--year-filter", type=str, default="2023",
+                        help="Year to filter for (e.g., '2023')")
     parser.add_argument("--random-distance", type=int, default=300,
                         help="Distance in kilometers for random points from cities (default: 100)")
     parser.add_argument("--ensure-on-land", action="store_true", default=True,
@@ -78,9 +72,15 @@ def main():
     cities_results = []
     random_points_results = []
     
-    # Create a structure to collect the best features for the combined JSON
-    best_features = []
-    query_metadata = []
+    # Create a unified structure for all areas and products
+    unified_result = {
+        "areas": [],
+        "properties": {
+            "totalProducts": 0,
+            "totalAreas": 0,
+            "description": "Combined Sentinel-2 Global Mosaics data for selected cities and random neighbor points"
+        }
+    }
     
     # Track land/water statistics
     random_points_on_land = 0
@@ -96,11 +96,8 @@ def main():
         result = query_sentinel2_by_coordinates(
             lat=lat,
             lon=lon,
-            start_date=args.start_date,
-            end_date=args.end_date,
-            max_records=args.max_records,  # Still query multiple tiles to find the best one
+            year=args.year_filter,
             output_dir=args.output_dir,
-            year_filter=args.year_filter,
             city_name=city_name,
             city_lat=lat,
             city_lon=lon,
@@ -108,70 +105,176 @@ def main():
         )
         
         if result:
-            # Select only the best tile (closest to the city center)
-            if result['count'] > 0 and 'json_data' in result and 'features' in result['json_data']:
-                # The features are already sorted by distance in query_sentinel2_by_coordinates
-                # So we just take the first one (closest)
-                best_feature = result['features'][0]
-                
-                # Find the corresponding original feature in the json_data
-                best_original_feature = None
-                for feature in result['json_data']['features']:
-                    # Try to match the feature based on title or other unique identifier
-                    if 'properties' in feature and 'title' in feature['properties'] and \
-                       'title' in best_feature and feature['properties']['title'] == best_feature['title']:
-                        best_original_feature = feature
-                        break
-                
-                if best_original_feature:
-                    # Add metadata to the best feature
-                    if 'properties' not in best_original_feature:
-                        best_original_feature['properties'] = {}
-                    
-                    # Add city metadata to the feature properties
-                    best_original_feature['properties']['city_name'] = city_name
-                    best_original_feature['properties']['city_lat'] = lat
-                    best_original_feature['properties']['city_lon'] = lon
-                    best_original_feature['properties']['is_neighbor'] = False
-                    best_original_feature['properties']['query_point_lat'] = lat
-                    best_original_feature['properties']['query_point_lon'] = lon
-                    best_original_feature['properties']['distance_km'] = best_feature['distance_km']
-                    best_original_feature['properties']['is_best_tile'] = True
-                    
-                    # Add the best feature to the collection
-                    best_features.append(best_original_feature)
-                    
-                    # Add query metadata
-                    query_metadata.append({
-                        'city_name': city_name,
-                        'query_point': {'lat': lat, 'lon': lon},
-                        'is_neighbor': False,
-                        'best_feature_title': best_feature['title'],
-                        'best_feature_distance_km': best_feature['distance_km'],
-                        'timestamp': datetime.now().isoformat()
-                    })
-                
-                result['features'] = [best_feature]  # Keep only the best feature
-                result['count'] = 1  # Update the count
-                print(f"Selected the best tile for {city_name}: {best_feature['title']}")
-                print(f"Distance from city center: {best_feature['distance_km']:.2f} km")
+            # Add area to the unified result
+            if 'areas' in result and result['areas']:
+                unified_result['areas'].extend(result['areas'])
+                unified_result['properties']['totalAreas'] += len(result['areas'])
+                unified_result['properties']['totalProducts'] += result['properties']['totalProducts']
             
-            # Don't overwrite the city_name if it's already set in the result
-            if not result.get('city_name'):
-                result['city_name'] = city_name
+            # Extract data from the result structure
+            area = result['areas'][0] if 'areas' in result and result['areas'] else None
+            
+            if area and area.get('quarterlyProducts', []):
+                # Create a structure compatible with the original explorer
+                compat_result = {
+                    'lat': lat,
+                    'lon': lon,
+                    'city_name': city_name,
+                    'city_lat': lat,
+                    'city_lon': lon,
+                    'is_neighbor': False,
+                    'count': 1,  # We're treating the area as a single feature now
+                    'features': []
+                }
                 
-            cities_results.append(result)
+                # Instead of creating individual features for each quarterly product,
+                # create a single "area" feature that represents the tile
+                # Use the first product to get basic information, but include all quarters
+                first_product = area['quarterlyProducts'][0] if area['quarterlyProducts'] else None
+                
+                if first_product:
+                    area_feature = {
+                        'title': f"Sentinel-2 Tile for {city_name} - {len(area['quarterlyProducts'])} quarters",
+                        'id': first_product.get('Id', ''),
+                        'product_type': 'S2 Global Mosaic Area',
+                        'quarterly_count': len(area['quarterlyProducts']),
+                        'quarters': [p.get('Name', '').split('_')[-2] for p in area['quarterlyProducts']],
+                        'year': args.year_filter,
+                        # Get geometry from first product that has restoGeometry
+                        'original_feature': next((p for p in area['quarterlyProducts'] if 'restoGeometry' in p), first_product)
+                    }
+                    
+                    # Extract dates 
+                    if 'ContentDate' in first_product:
+                        area_feature['start_date'] = first_product['ContentDate'].get('Start', '')
+                        area_feature['end_date'] = first_product['ContentDate'].get('End', '')
+                    
+                    # Add download URL from first product
+                    if 'downloadUrl' in first_product:
+                        area_feature['download_url'] = first_product['downloadUrl']
+                    elif 'restoProperties' in first_product and 'services' in first_product['restoProperties'] and 'download' in first_product['restoProperties']['services']:
+                        area_feature['download_url'] = first_product['restoProperties']['services']['download'].get('url', '')
+                    
+                    # Add the tile ID if present
+                    tile_id = None
+                    for product in area['quarterlyProducts']:
+                        if 'Name' in product:
+                            # Try to extract tile ID from the name
+                            # Format is typically: Sentinel-2_mosaic_YEAR_QUARTER_TILEID_RESOLUTION_VERSION
+                            parts = product['Name'].split('_')
+                            if len(parts) >= 5:
+                                tile_id = parts[4]
+                                break
+                    
+                    if tile_id:
+                        area_feature['tile_id'] = tile_id
+                    
+                    compat_result['features'].append(area_feature)
+                
+                # Store raw data for JSON output
+                compat_result['json_data'] = {'area': area}
+                
+                if 'tile_id' in area_feature:
+                    print(f"Selected the tile for {city_name}")
+                    print(f"Tile ID: {area_feature['tile_id']}")
+                    print(f"Distance from city center: 0.00 km")
+                    print(f"Contains {area_feature.get('quarterly_count', 0)} quarterly products for {args.year_filter}")
+                
+                cities_results.append(compat_result)
+            else:
+                # No products found, create an empty result
+                empty_result = {
+                    'lat': lat,
+                    'lon': lon,
+                    'city_name': city_name,
+                    'city_lat': lat,
+                    'city_lon': lon,
+                    'is_neighbor': False,
+                    'count': 0,
+                    'features': [],
+                    'json_data': {'features': []}
+                }
+                cities_results.append(empty_result)
+                print(f"No Sentinel-2 data found for {city_name}")
         
         # Generate a random point at the specified distance and query for it
         print(f"\nGenerating random point {args.random_distance} km away from {city_name}...")
         
-        random_point_result = get_random_point_at_distance(
-            lat, lon, args.random_distance, 
-            ensure_on_land=args.ensure_on_land,
-            max_attempts=args.max_land_attempts
-        )
+        # Before generating a random point, let's check if we have a valid city tile footprint
+        if cities_results and cities_results[-1].get('count', 0) > 0 and cities_results[-1].get('features', []):
+            city_feature = cities_results[-1]['features'][0]
+            city_footprint_found = False
+            city_tile_id = city_feature.get('tile_id')
+            
+            # Get the footprint coordinates if available in the original feature
+            original_feature = city_feature.get('original_feature')
+            coords = []
+            
+            if original_feature:
+                # First try direct restoGeometry
+                if 'restoGeometry' in original_feature:
+                    geom = original_feature['restoGeometry']
+                    if 'type' in geom and geom['type'] == 'Polygon' and 'coordinates' in geom:
+                        geometry_coords = geom['coordinates'][0]
+                        # Convert from [lon, lat] to [lat, lon] for compatibility
+                        coords = [(coord[1], coord[0]) for coord in geometry_coords]
+                        city_footprint_found = True
+                # Then try standard geometry
+                elif 'geometry' in original_feature and original_feature['geometry']['type'] == 'Polygon':
+                    geometry_coords = original_feature['geometry']['coordinates'][0]
+                    coords = [(coord[1], coord[0]) for coord in geometry_coords]
+                    city_footprint_found = True
+            
+            # If we found the city tile footprint, generate points within a sensible distance
+            # but also in a different tile
+            if city_footprint_found and city_tile_id:
+                print(f"Found city tile footprint for {city_name} with ID {city_tile_id}")
+                
+                # Create a polygon from the coordinates
+                from shapely.geometry import Polygon, Point
+                city_polygon = Polygon(coords)
+                
+                # Attempt to find a point within a different tile at the specified distance
+                max_attempts = 20  # Increase attempts since we're more selective now
+                found_valid_point = False
+                
+                for attempt in range(max_attempts):
+                    # Generate a random point at the specified distance
+                    random_point_result = get_random_point_at_distance(
+                        lat, lon, args.random_distance, 
+                        ensure_on_land=args.ensure_on_land,
+                        max_attempts=args.max_land_attempts
+                    )
+                    
+                    if random_point_result is None:
+                        continue
+                        
+                    random_lat, random_lon, is_on_land = random_point_result
+                    
+                    # Check if this point is outside the city tile footprint
+                    # We want to find a point in a different tile
+                    if not city_polygon.contains(Point(random_lon, random_lat)):
+                        found_valid_point = True
+                        print(f"Found valid random point outside the city tile after {attempt+1} attempts")
+                        break
+                
+                if not found_valid_point:
+                    print(f"Could not find a random point outside the city tile after {max_attempts} attempts.")
+                    print(f"Falling back to standard random point generation.")
+                    random_point_result = get_random_point_at_distance(
+                        lat, lon, args.random_distance, 
+                        ensure_on_land=args.ensure_on_land,
+                        max_attempts=args.max_land_attempts
+                    )
+            else:
+                # Fallback to standard random point generation
+                random_point_result = get_random_point_at_distance(
+                    lat, lon, args.random_distance, 
+                    ensure_on_land=args.ensure_on_land,
+                    max_attempts=args.max_land_attempts
+                )
         
-        # Skip this random point if we couldn't find a point on land and ensure_on_land is True
+        # Skip this random point if we couldn't find a point
         if random_point_result is None:
             print(f"Could not find a point on land after {args.max_land_attempts} attempts. Skipping random point for {city_name}.")
             skipped_random_points += 1
@@ -189,121 +292,123 @@ def main():
             
         print(f"Random point {args.random_distance} km away: ({random_lat}, {random_lon}) - {land_status}")
         
+        # After generating the random point, add extra check to ensure it will be in a different tile
+        # than the city's tile by using a smaller bounding box for the query
+        if city_tile_id:
+            neighborhood_size = 0.05  # Smaller neighborhood to increase chance of single tile match
+        else:
+            neighborhood_size = None  # Use default size
+        
         # Query Sentinel-2 data for the random point
         random_result = query_sentinel2_by_coordinates(
             lat=random_lat,
             lon=random_lon,
-            start_date=args.start_date,
-            end_date=args.end_date,
-            max_records=args.max_records,  # Query multiple tiles to find the best one
+            year=args.year_filter,
             output_dir=args.output_dir,
-            year_filter=args.year_filter,
             city_name=city_name,
             city_lat=lat,
             city_lon=lon,
             is_neighbor=True
         )
         
-        # Create a result object for the random point even if no data is found
+        # Handle the random point result
         if random_result:
-            # Select only the best tile (closest to the random point)
-            if random_result['count'] > 0 and 'json_data' in random_result and 'features' in random_result['json_data']:
-                # The features are already sorted by distance in query_sentinel2_by_coordinates
-                # So we just take the first one (closest)
-                best_feature = random_result['features'][0]
+            # Add area to the unified result
+            if 'areas' in random_result and random_result['areas']:
+                unified_result['areas'].extend(random_result['areas'])
+                unified_result['properties']['totalAreas'] += len(random_result['areas'])
+                unified_result['properties']['totalProducts'] += random_result['properties']['totalProducts']
+            
+            # Extract data from the new result structure
+            area = random_result['areas'][0] if 'areas' in random_result and random_result['areas'] else None
+            
+            if area and area.get('quarterlyProducts', []):
+                # Create a structure compatible with the original explorer
+                compat_result = {
+                    'lat': random_lat,
+                    'lon': random_lon,
+                    'city_name': city_name,
+                    'city_lat': lat,
+                    'city_lon': lon,
+                    'is_neighbor': True,
+                    'is_on_land': is_on_land,
+                    'land_status': land_status,
+                    'distance_from_city': args.random_distance,
+                    'original_city_lat': lat,
+                    'original_city_lon': lon,
+                    'count': 1,  # Treating area as one feature
+                    'features': []
+                }
                 
-                # Find the corresponding original feature in the json_data
-                best_original_feature = None
-                for feature in random_result['json_data']['features']:
-                    # Try to match the feature based on title or other unique identifier
-                    if 'properties' in feature and 'title' in feature['properties'] and \
-                       'title' in best_feature and feature['properties']['title'] == best_feature['title']:
-                        best_original_feature = feature
-                        break
+                # Similar to city processing, create a single area feature
+                first_product = area['quarterlyProducts'][0] if area['quarterlyProducts'] else None
                 
-                if best_original_feature:
-                    # Add metadata to the best feature
-                    if 'properties' not in best_original_feature:
-                        best_original_feature['properties'] = {}
+                if first_product:
+                    area_feature = {
+                        'title': f"Sentinel-2 Tile for {city_name} (Random Point) - {len(area['quarterlyProducts'])} quarters",
+                        'id': first_product.get('Id', ''),
+                        'product_type': 'S2 Global Mosaic Area',
+                        'quarterly_count': len(area['quarterlyProducts']),
+                        'quarters': [p.get('Name', '').split('_')[-2] for p in area['quarterlyProducts']],
+                        'year': args.year_filter,
+                        # Get geometry from first product that has restoGeometry
+                        'original_feature': next((p for p in area['quarterlyProducts'] if 'restoGeometry' in p), first_product)
+                    }
                     
-                    # Add city and random point metadata to the feature properties
-                    best_original_feature['properties']['city_name'] = city_name
-                    best_original_feature['properties']['city_lat'] = lat
-                    best_original_feature['properties']['city_lon'] = lon
-                    best_original_feature['properties']['is_neighbor'] = True
-                    best_original_feature['properties']['query_point_lat'] = random_lat
-                    best_original_feature['properties']['query_point_lon'] = random_lon
-                    best_original_feature['properties']['is_on_land'] = is_on_land
-                    best_original_feature['properties']['land_status'] = land_status
-                    best_original_feature['properties']['distance_from_city'] = args.random_distance
-                    best_original_feature['properties']['distance_km'] = best_feature['distance_km']
-                    best_original_feature['properties']['is_best_tile'] = True
+                    # Extract dates
+                    if 'ContentDate' in first_product:
+                        area_feature['start_date'] = first_product['ContentDate'].get('Start', '')
+                        area_feature['end_date'] = first_product['ContentDate'].get('End', '')
                     
-                    # Add the best feature to the collection
-                    best_features.append(best_original_feature)
+                    # Add download URL
+                    if 'downloadUrl' in first_product:
+                        area_feature['download_url'] = first_product['downloadUrl']
+                    elif 'restoProperties' in first_product and 'services' in first_product['restoProperties'] and 'download' in first_product['restoProperties']['services']:
+                        area_feature['download_url'] = first_product['restoProperties']['services']['download'].get('url', '')
                     
-                    # Add query metadata
-                    query_metadata.append({
-                        'city_name': city_name,
-                        'query_point': {'lat': random_lat, 'lon': random_lon},
-                        'is_neighbor': True,
-                        'is_on_land': is_on_land,
-                        'land_status': land_status,
-                        'distance_from_city': args.random_distance,
-                        'best_feature_title': best_feature['title'],
-                        'best_feature_distance_km': best_feature['distance_km'],
-                        'timestamp': datetime.now().isoformat()
-                    })
-            
-            # Add land/water status to the result
-            random_result['is_on_land'] = is_on_land
-            random_result['land_status'] = land_status
-            
-            # Set the city name with land/water indicator, but preserve the original city metadata
-            land_indicator = "Land" if is_on_land else "Water"
-            random_result['display_name'] = f"{city_name} (Random Point - {land_indicator})"
-            
-            # Don't overwrite the city metadata if it's already set
-            if not random_result.get('city_name'):
-                random_result['city_name'] = city_name
-            if not random_result.get('city_lat'):
-                random_result['city_lat'] = lat
-            if not random_result.get('city_lon'):
-                random_result['city_lon'] = lon
-            if not 'is_neighbor' in random_result:
-                random_result['is_neighbor'] = True
+                    # Add the tile ID if present
+                    tile_id = None
+                    for product in area['quarterlyProducts']:
+                        if 'Name' in product:
+                            parts = product['Name'].split('_')
+                            if len(parts) >= 5:
+                                tile_id = parts[4]
+                                break
+                    
+                    if tile_id:
+                        area_feature['tile_id'] = tile_id
+                    
+                    compat_result['features'].append(area_feature)
                 
-            random_result['original_city_lat'] = lat
-            random_result['original_city_lon'] = lon
-            random_result['distance_from_city'] = args.random_distance
-            
-            # Print details of the random point's tile
-            print(f"Found {random_result['count']} Sentinel-2 tiles for the random point")
-            
-            if random_result['count'] > 0:
-                # Select only the best tile (closest to the random point)
-                best_feature = random_result['features'][0]
-                random_result['features'] = [best_feature]  # Keep only the best feature
-                random_result['count'] = 1  # Update the count
+                # Store raw data for JSON output
+                compat_result['json_data'] = {'area': area}
                 
-                print("\nRandom Point Best Tile Details:")
-                print(f"  Title: {best_feature['title']}")
-                print(f"  Start Date: {best_feature['start_date']}")
-                print(f"  Product Type: {best_feature['product_type']}")
-                if best_feature.get('tile_id'):
-                    print(f"  Tile ID: {best_feature['tile_id']}")
-                print(f"  Distance from random point: {best_feature['distance_km']:.2f} km")
-                if best_feature.get('download_url'):
-                    print(f"  Download URL: {best_feature['download_url']}")
-                
-                # Only add to results if we found tiles
-                random_points_results.append(random_result)
-            else:
-                print(f"No Sentinel-2 tiles found for the random point near {city_name}")
-                
-                # Add the random point to the map even if no tiles were found
+                # Set the display name with land/water indicator
                 land_indicator = "Land" if is_on_land else "Water"
-                empty_random_result = {
+                compat_result['display_name'] = f"{city_name} (Random Point - {land_indicator})"
+                
+                # Print summary and add to results
+                if compat_result['features']:
+                    best_feature = compat_result['features'][0]
+                    print(f"\nRandom Point Tile Details:")
+                    if 'tile_id' in best_feature:
+                        print(f"  Tile ID: {best_feature['tile_id']}")
+                    print(f"  Contains {best_feature.get('quarterly_count', 0)} quarterly products for {args.year_filter}")
+                    print(f"  Distance from city center: {args.random_distance:.2f} km")
+                    
+                    # Add coordinates to the tile feature for better visualization
+                    best_feature['query_point_lat'] = random_lat
+                    best_feature['query_point_lon'] = random_lon
+                    
+                    if 'download_url' in best_feature:
+                        print(f"  Download URL available")
+                
+                print(f"Found tile with Sentinel-2 data for the random point")
+                random_points_results.append(compat_result)
+            else:
+                # No products found, create an empty result
+                land_indicator = "Land" if is_on_land else "Water"
+                empty_result = {
                     'lat': random_lat,
                     'lon': random_lon,
                     'display_name': f"{city_name} (Random Point - {land_indicator} - No Data)",
@@ -319,13 +424,12 @@ def main():
                     'is_on_land': is_on_land,
                     'land_status': land_status
                 }
-                random_points_results.append(empty_random_result)
+                random_points_results.append(empty_result)
+                print(f"No Sentinel-2 data found for the random point near {city_name}")
         else:
-            print(f"Query failed for the random point near {city_name}")
-            
-            # Add the random point to the map even if the query failed
+            # Query failed, create an empty result
             land_indicator = "Land" if is_on_land else "Water"
-            failed_random_result = {
+            failed_result = {
                 'lat': random_lat,
                 'lon': random_lon,
                 'display_name': f"{city_name} (Random Point - {land_indicator} - Query Failed)",
@@ -341,32 +445,16 @@ def main():
                 'is_on_land': is_on_land,
                 'land_status': land_status
             }
-            random_points_results.append(failed_random_result)
+            random_points_results.append(failed_result)
+            print(f"Query failed for the random point near {city_name}")
     
-    # Save the combined JSON file with only the best features
-    if best_features:
-        # Create a combined data structure
-        combined_data = {
-            "type": "FeatureCollection",
-            "features": best_features,
-            "properties": {
-                "totalResults": len(best_features),
-                "exactCount": True,
-                "queries": query_metadata,
-                "combined_timestamp": datetime.now().isoformat(),
-                "description": "Combined Sentinel-2 best features from all queries"
-            }
-        }
-        
-        # Create a filename with timestamp to avoid overwriting
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        combined_file = os.path.join(args.output_dir, f"S2_GlobalMosaics_{args.year_filter}_best_tiles_{timestamp}.json")
-        
-        # Save the combined data
-        with open(combined_file, 'w') as f:
-            json.dump(combined_data, f, indent=2)
-        
-        print(f"\nSaved combined JSON with {len(best_features)} best features to {combined_file}")
+    # Save only the unified JSON file with all areas
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    unified_file = os.path.join(args.output_dir, f"S2_GlobalMosaics_{args.year_filter}_unified_{timestamp}.json")
+    with open(unified_file, 'w') as f:
+        json.dump(unified_result, f, indent=2)
+    
+    print(f"\nSaved unified JSON with {unified_result['properties']['totalAreas']} areas and {unified_result['properties']['totalProducts']} products to {unified_file}")
     
     # Combine city results and random point results for the map
     all_results = cities_results + random_points_results
@@ -384,9 +472,9 @@ def main():
     print(f"- Selected {len(selected_cities)} dispersed cities")
     print(f"- Found Sentinel-2 Global Mosaic data for {cities_with_data} cities")
     print(f"- Found Sentinel-2 Global Mosaic data for {random_points_with_data} random points")
-    print(f"- Selected the best (closest) tile for each location with data")
-    print(f"- Total Sentinel-2 Global Mosaic tiles for cities: {sum(r['count'] for r in cities_results)}")
-    print(f"- Total Sentinel-2 Global Mosaic tiles for random points: {sum(r['count'] for r in random_points_results)}")
+    print(f"- Selected tiles for each location with data")
+    print(f"- Total Sentinel-2 Global Mosaic tiles for cities: {cities_with_data}")
+    print(f"- Total Sentinel-2 Global Mosaic tiles for random points: {random_points_with_data}")
     
     # Calculate percentages based on non-skipped points
     total_random_points_generated = random_points_on_land + random_points_in_water
@@ -406,8 +494,7 @@ def main():
     print(f"- Random points in water: {random_points_in_water} ({water_percent:.1f}% of generated points)")
     print(f"- Random points skipped: {skipped_random_points} ({skipped_percent:.1f}% of attempted points)")
     print(f"- Interactive map saved to {args.output_map}")
-    if best_features:
-        print(f"- Combined JSON with {len(best_features)} best features saved to {combined_file}")
+    print(f"- Unified JSON with {unified_result['properties']['totalAreas']} areas and {unified_result['properties']['totalProducts']} products saved to {unified_file}")
 
 if __name__ == "__main__":
     main() 

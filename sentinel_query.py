@@ -15,225 +15,397 @@ from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon
 import geopandas as gpd
 import warnings
+import traceback
 
 # Global variable to store the land polygons once loaded
 _LAND_POLYGONS = None
+
+# Global constants for token handling
+TOKEN_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
+TOKEN_FILE = 'copernicus_dataspace_token.json'
 
 # Create data directory for land polygons if it doesn't exist
 data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 os.makedirs(data_dir, exist_ok=True)
 
-def query_sentinel2_by_coordinates(lat, lon, start_date=None, end_date=None, 
-                                  max_records=10, output_dir="results", year_filter="2022",
-                                  city_name=None, city_lat=None, city_lon=None, is_neighbor=False):
+def is_token_valid(access_token):
+    """
+    Check if the current access token is valid.
+    
+    Args:
+        access_token (str): The access token to check
+        
+    Returns:
+        bool: True if the token is valid, False otherwise
+    """
+    if not access_token:
+        print("No access token available to check")
+        return False
+    
+    try:
+        # Try to get user info with the current token
+        headers = {'Authorization': f'Bearer {access_token}'}
+        response = requests.get(
+            'https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/userinfo', 
+            headers=headers
+        )
+        
+        if response.status_code == 200:
+            print("Access token is valid")
+            return True
+        else:
+            print(f"Access token validation failed: {response.status_code}")
+            return False
+    except Exception as e:
+        print(f"Error checking token validity: {e}")
+        return False
+
+def refresh_access_token(token_file=TOKEN_FILE):
+    """
+    Refresh the access token using the refresh token.
+    
+    Args:
+        token_file (str): Path to the token file
+        
+    Returns:
+        dict or None: New token data if refresh was successful, None otherwise
+    """
+    try:
+        with open(token_file, 'r') as file:
+            token_data = json.load(file)
+            refresh_token = token_data.get('refresh_token')
+            
+            if not refresh_token:
+                raise ValueError('No refresh token found')
+
+            headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+            data = {
+                'grant_type': 'refresh_token',
+                'refresh_token': refresh_token,
+                'client_id': 'cdse-public'
+            }
+
+            response = requests.post(TOKEN_URL, headers=headers, data=data)
+            response.raise_for_status()
+            
+            new_token_data = response.json()
+            
+            # Update the token file with new tokens
+            with open(token_file, 'w') as f:
+                json.dump(new_token_data, f)
+            
+            print("Access token refreshed successfully")
+            
+            return new_token_data
+
+    except Exception as e:
+        print(f'Error refreshing access token: {e}')
+        print(f'Stacktrace:\n{traceback.format_exc()}')
+        return None
+
+def load_or_refresh_token(token_file=TOKEN_FILE):
+    """
+    Load the token from file and refresh it if necessary.
+    
+    Args:
+        token_file (str): Path to the token file
+        
+    Returns:
+        str or None: The valid access token if available, None otherwise
+    """
+    try:
+        # Load the token
+        with open(token_file, 'r') as f:
+            token_data = json.load(f)
+            access_token = token_data.get('access_token')
+        
+        # Check if token is valid
+        if access_token and is_token_valid(access_token):
+            return access_token
+        
+        # Token is invalid, try to refresh
+        print("Token is invalid or expired, attempting to refresh...")
+        new_token_data = refresh_access_token(token_file)
+        
+        if new_token_data:
+            return new_token_data.get('access_token')
+        else:
+            print("Token refresh failed. Please generate a new token.")
+            return None
+    
+    except Exception as e:
+        print(f"Error loading or refreshing token: {e}")
+        return None
+
+def query_sentinel2_by_coordinates(lat, lon, year="2023", output_dir="results",
+                                  city_name=None, city_lat=None, city_lon=None, is_neighbor=False, save_results=False):
     """
     Query the Copernicus Data Space API for Sentinel-2 Global Mosaics data based on coordinates.
     
     Args:
         lat (float): Latitude of the point of interest
         lon (float): Longitude of the point of interest
-        start_date (str): Start date in format "YYYY-MM-DD" (defaults to beginning of year_filter)
-        end_date (str): End date in format "YYYY-MM-DD" (defaults to end of year_filter)
-        max_records (int): Maximum number of records to return (default: 10)
+        year (str): Year to filter for (default: "2023")
         output_dir (str): Directory to save output files
-        year_filter (str): Year to filter for (e.g., "2022")
         city_name (str): Name of the associated city
         city_lat (float): Latitude of the associated city
         city_lon (float): Longitude of the associated city
         is_neighbor (bool): Whether this point is a neighbor/random point of a city
+        save_results (bool): Whether to save individual query results
         
     Returns:
-        dict: Dictionary containing query results and file paths
+        dict: Structured JSON with areas and quarterly products
     """
     # Create output directory if it doesn't exist
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     
-    # Set default dates if not provided
-    if start_date is None:
-        if year_filter:
-            start_date = f"{year_filter}-01-01"  # Start from beginning of specified year
-        else:
-            start_date = "2020-01-01"  # Default to 2020 for mosaics
+    # Create a bounding box around the point
+    # Use a larger bounding box for random points to ensure better coverage
+    box_size = 0.2 if is_neighbor else 0.1  # 0.2 degrees is roughly 22km at the equator
     
-    if end_date is None:
-        if year_filter:
-            end_date = f"{year_filter}-12-31"  # End at end of specified year
-        else:
-            end_date = datetime.now().strftime("%Y-%m-%d")
+    # Define quarters to check
+    quarters = ["Q1", "Q2", "Q3", "Q4"]
     
-    # Format dates for API
-    start_date_formatted = f"{start_date}T00:00:00Z"
-    end_date_formatted = f"{end_date}T23:59:59Z"
+    # Calculate distance from query point to city center if city coordinates are provided
+    distance_km = 0
+    if city_lat is not None and city_lon is not None and lat is not None and lon is not None:
+        # Convert to radians
+        lon1, lat1, lon2, lat2 = map(math.radians, [city_lon, city_lat, lon, lat])
+        
+        # Haversine formula
+        dlon = lon2 - lon1
+        dlat = lat2 - lat1
+        a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+        c = 2 * math.asin(math.sqrt(a))
+        r = 6371  # Radius of Earth in kilometers
+        distance_km = c * r
     
-    # Create a bounding box around the point (approximately 10km)
-    # 0.1 degrees is roughly 11km at the equator
-    box_size = 0.1
-    bbox = f"{lon-box_size},{lat-box_size},{lon+box_size},{lat+box_size}"
-    
-    # Base URL and parameters for Global Mosaics
-    url = "https://catalogue.dataspace.copernicus.eu/resto/api/collections/GLOBAL-MOSAICS/search.json"
-    params = {
-        "startDate": start_date_formatted,
-        "completionDate": end_date_formatted,
-        "maxRecords": str(max_records),  # Request the specified number of records
-        "box": bbox,  # This is the key parameter for spatial filtering
-        "platform": "SENTINEL-2"  # Explicitly filter for SENTINEL-2 platform
-    }
-    print(f"Querying Sentinel-2 Global Mosaic data for coordinates ({lat}, {lon})")
-    
-    # Make the request
-    response = requests.get(url, params=params)
-    print(f"Request URL: {response.url}")
-    
-    if response.status_code != 200:
-        print(f"Error: {response.status_code} - {response.text}")
+    # Load and refresh token if needed
+    access_token = load_or_refresh_token()
+    if not access_token:
+        print("Failed to obtain a valid access token")
         return None
     
-    # Parse the JSON response
-    json_data = response.json()
+    # Set up headers
+    headers = {
+        'Authorization': f'Bearer {access_token}'
+    }
     
-    # Check if we have features
-    if 'features' not in json_data or len(json_data['features']) == 0:
-        print(f"No results found for coordinates ({lat}, {lon})")
-        return {
-            'lat': lat,
-            'lon': lon,
-            'features': [],
-            'count': 0,
-            'json_data': json_data
-        }
+    # Create a structure to store quarterly products
+    all_quarterly_products = []
     
-    # Helper function to check if a point is inside a polygon
-    def point_in_polygon(point, polygon):
-        """
-        Check if a point is inside a polygon using the ray casting algorithm.
+    # Check each quarter
+    for quarter in quarters:
+        # Make the OData request with coordinates
+        url = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products"
         
-        Args:
-            point (tuple): Point coordinates (x, y)
-            polygon (list): List of polygon vertices [(x1, y1), (x2, y2), ...]
+        # Create a spatial filter using the bounding box
+        spatial_filter = f"OData.CSC.Intersects(area=geography'SRID=4326;POLYGON(({lon-box_size} {lat-box_size}, {lon-box_size} {lat+box_size}, {lon+box_size} {lat+box_size}, {lon+box_size} {lat-box_size}, {lon-box_size} {lat-box_size}))')"
+        
+        params = {
+            "$filter": f"({spatial_filter}) and Collection/Name eq 'GLOBAL-MOSAICS' and contains(Name,'{year}_{quarter}')"
+        }
+
+        # Try the request, with token refresh if needed
+        max_retries = 2
+        for retry in range(max_retries + 1):
+            response = requests.get(url, headers=headers, params=params)
             
-        Returns:
-            bool: True if the point is inside the polygon, False otherwise
-        """
-        x, y = point
-        n = len(polygon)
-        inside = False
-        
-        p1x, p1y = polygon[0]
-        for i in range(1, n + 1):
-            p2x, p2y = polygon[i % n]
-            if y > min(p1y, p2y):
-                if y <= max(p1y, p2y):
-                    if x <= max(p1x, p2x):
-                        if p1y != p2y:
-                            xinters = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
-                        if p1x == p2x or x <= xinters:
-                            inside = not inside
-            p1x, p1y = p2x, p2y
-        
-        return inside
-    
-    # Process the features
-    features = json_data['features']
-    print(f"Found {len(features)} features")
-    
-    # Extract key information from properties
-    processed_features = []
-    for feature in features:
-        props = feature['properties']
-        
-        # Extract footprint if available
-        footprint = None
-        if 'footprint' in props:
-            footprint = props['footprint']
-        
-        # Extract tile ID from title
-        tile_id = None
-        if 'title' in props:
-            title = props['title']
-            # Example title format: "Sentinel-2_mosaic_2022_Q4_19GFH_0_0"
-            parts = title.split('_')
-            if len(parts) >= 5:
-                tile_id = parts[4]  # Extract the tile ID part
-        
-        # Calculate distance from the query point to the center of the tile
-        # This is used for ranking tiles
-        distance_km = 0
-        if 'centroid' in props:
-            centroid = props['centroid']
-            # Handle different centroid formats
-            try:
-                # Check if centroid is a list/array with at least 2 elements
-                if isinstance(centroid, (list, tuple)) and len(centroid) >= 2:
-                    lon2, lat2 = centroid[0], centroid[1]
-                # Check if centroid is a dictionary with lon/lat keys
-                elif isinstance(centroid, dict) and 'lon' in centroid and 'lat' in centroid:
-                    lon2, lat2 = centroid['lon'], centroid['lat']
-                # Check if centroid is a dictionary with coordinates array
-                elif isinstance(centroid, dict) and 'coordinates' in centroid and len(centroid['coordinates']) >= 2:
-                    lon2, lat2 = centroid['coordinates'][0], centroid['coordinates'][1]
+            print(f"\n{year} {quarter}:")
+            print(f"Status code: {response.status_code}")
+            
+            # If we get a 401 or 403, the token might be expired
+            if response.status_code in [401, 403] and retry < max_retries:
+                print(f"Authentication error ({response.status_code}). Refreshing token and retrying...")
+                # Refresh the token
+                new_token_data = refresh_access_token()
+                if new_token_data:
+                    # Update the headers with the new token
+                    access_token = new_token_data.get('access_token')
+                    headers = {'Authorization': f'Bearer {access_token}'}
+                    print(f"Token refreshed. Retrying request {retry+1}/{max_retries}...")
                 else:
-                    # If we can't parse the centroid, use the query coordinates
-                    print(f"Warning: Could not parse centroid format: {centroid}")
-                    lon2, lat2 = lon, lat
-                
-                # Convert to radians
-                lon1, lat1, lon2, lat2 = map(math.radians, [lon, lat, lon2, lat2])
-                
-                # Haversine formula
-                dlon = lon2 - lon1
-                dlat = lat2 - lat1
-                a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
-                c = 2 * math.asin(math.sqrt(a))
-                r = 6371  # Radius of Earth in kilometers
-                distance_km = c * r
-            except (TypeError, IndexError, KeyError) as e:
-                print(f"Warning: Error calculating distance: {e}")
-                # If there's an error, set distance to 0
-                distance_km = 0
+                    print("Failed to refresh token. Aborting query.")
+                    break
+            else:
+                # Either success or a different error that we won't retry
+                break
         
-        # Create a processed feature
-        processed_feature = {
-            'title': props.get('title', 'Unknown'),
-            'platform': props.get('platform', 'Unknown'),
-            'start_date': props.get('startDate', 'Unknown'),
-            'completion_date': props.get('completionDate', 'Unknown'),
-            'product_type': props.get('productType', 'Unknown'),
-            'tile_id': tile_id,
-            'footprint': footprint,
-            'distance_km': distance_km,
-            'download_url': props.get('services', {}).get('download', {}).get('url'),
-            'original_feature': feature,
-            # Add the new metadata fields
-            'city_name': city_name,
-            'city_lat': city_lat,
-            'city_lon': city_lon,
-            'is_neighbor': is_neighbor
-        }
+        # Process the response
+        if response.status_code == 200:
+            result = response.json()
+            
+            # Process each product
+            for product in result.get('value', []):
+                # Create product entry by using the original product data
+                product_entry = dict(product)  # Copy all original fields
+                
+                # Set the quarter for reference
+                product_entry["quarter"] = quarter
+                
+                # Default: point is not inside this product's footprint
+                product_entry["contains_query_point"] = False
+                
+                # Try to get additional metadata from the RESTO API endpoint
+                product_id = product.get('Id')
+                if product_id:
+                    resto_url = f"https://catalogue.dataspace.copernicus.eu/resto/collections/GLOBAL-MOSAICS/{product_id}.json"
+                    # Try the RESTO API request with token refresh if needed
+                    max_resto_retries = 2
+                    for resto_retry in range(max_resto_retries + 1):
+                        try:
+                            resto_response = requests.get(resto_url, headers=headers)
+                            
+                            # If we get a 401 or 403, the token might be expired
+                            if resto_response.status_code in [401, 403] and resto_retry < max_resto_retries:
+                                print(f"Authentication error ({resto_response.status_code}) in RESTO API. Refreshing token...")
+                                # Refresh the token
+                                new_token_data = refresh_access_token()
+                                if new_token_data:
+                                    # Update the headers with the new token
+                                    access_token = new_token_data.get('access_token')
+                                    headers = {'Authorization': f'Bearer {access_token}'}
+                                    print(f"Token refreshed. Retrying RESTO API request {resto_retry+1}/{max_resto_retries}...")
+                                else:
+                                    print("Failed to refresh token for RESTO API. Skipping metadata.")
+                                    break
+                            else:
+                                # Process the response
+                                if resto_response.status_code == 200:
+                                    resto_data = resto_response.json()
+                                    
+                                    # Add the RESTO API geometry
+                                    if 'geometry' in resto_data:
+                                        product_entry["restoGeometry"] = resto_data['geometry']
+                                        
+                                        # Check if query point is inside this product's geometry
+                                        geom = resto_data['geometry']
+                                        if geom.get('type') == 'Polygon' and 'coordinates' in geom:
+                                            # Extract the coordinates of the polygon
+                                            coords = geom['coordinates'][0]  # First ring of coordinates
+                                            
+                                            # Convert coordinates to a shapely polygon
+                                            poly_coords = [(coord[0], coord[1]) for coord in coords]
+                                            try:
+                                                from shapely.geometry import Point, Polygon
+                                                polygon = Polygon(poly_coords)
+                                                point = Point(lon, lat)
+                                                
+                                                # Check if point is inside polygon
+                                                product_entry["contains_query_point"] = polygon.contains(point)
+                                                
+                                                if product_entry["contains_query_point"]:
+                                                    print(f"Found product that contains the query point: {product.get('Name')}")
+                                            except Exception as e:
+                                                print(f"Error checking if point is in polygon: {e}")
+                                            
+                                            # Calculate the centroid (simple average of coordinates)
+                                            centroid_lon = sum(coord[0] for coord in coords) / len(coords)
+                                            centroid_lat = sum(coord[1] for coord in coords) / len(coords)
+                                            
+                                            # Store the centroid
+                                            product_entry["centroid"] = {
+                                                "lat": centroid_lat,
+                                                "lon": centroid_lon
+                                            }
+                                            
+                                            # Calculate distance from query point to centroid using Haversine formula
+                                            # Convert to radians
+                                            q_lon, q_lat = math.radians(lon), math.radians(lat)
+                                            c_lon, c_lat = math.radians(centroid_lon), math.radians(centroid_lat)
+                                            
+                                            # Haversine formula
+                                            dlon = c_lon - q_lon
+                                            dlat = c_lat - q_lat
+                                            a = math.sin(dlat/2)**2 + math.cos(q_lat) * math.cos(c_lat) * math.sin(dlon/2)**2
+                                            c = 2 * math.asin(math.sqrt(a))
+                                            r = 6371  # Radius of Earth in kilometers
+                                            
+                                            # Store the distance to query point
+                                            product_entry["distance_to_query"] = c * r
+                                        
+                                    # Add the RESTO API properties
+                                    if 'properties' in resto_data:
+                                        product_entry["restoProperties"] = resto_data['properties']
+                                else:
+                                    print(f"Failed to get RESTO metadata for product {product_id}: {resto_response.status_code}")
+                                
+                                # We've either succeeded or failed with a non-auth error, so break the retry loop
+                                break
+                                
+                        except Exception as e:
+                            print(f"Error fetching RESTO metadata: {e}")
+                            # If RESTO API fails, add our own download URL as fallback
+                            if not product.get('downloadUrl') and not product.get('services', {}).get('download', {}).get('url'):
+                                product_entry["downloadUrl"] = f"https://catalogue.dataspace.copernicus.eu/odata/v1/Products({product.get('Id')})/$value"
+                            break
+                
+                # If no centroid was calculated (no geometry or error), create a fallback
+                if "centroid" not in product_entry:
+                    # Use the query coordinates as a fallback and set a high distance
+                    product_entry["centroid"] = {
+                        "lat": lat,
+                        "lon": lon
+                    }
+                    # Set a high distance value to rank these products lower
+                    product_entry["distance_to_query"] = 1000.0
+                
+                all_quarterly_products.append(product_entry)
+    
+    # First, check if we found any products that contain the query point
+    products_containing_point = [p for p in all_quarterly_products if p.get("contains_query_point", False)]
+    
+    if products_containing_point:
+        print(f"Found {len(products_containing_point)} products that contain the query point.")
+        # Sort by distance to query point for products that contain the point
+        products_containing_point.sort(key=lambda x: x.get("distance_to_query", 1000.0))
+        quarterly_products = products_containing_point[:min(4, len(products_containing_point))]
         
-        processed_features.append(processed_feature)
+        # If we need more products, get the closest ones regardless of containing the point
+        if len(quarterly_products) < 4:
+            print(f"Need {4 - len(quarterly_products)} more products. Adding closest ones.")
+            remaining_products = [p for p in all_quarterly_products if p not in quarterly_products]
+            remaining_products.sort(key=lambda x: x.get("distance_to_query", 1000.0))
+            quarterly_products.extend(remaining_products[:min(4 - len(quarterly_products), len(remaining_products))])
+    else:
+        print(f"No products found that contain the query point. Using closest products by distance.")
+        # Sort products by distance to query point (closest first)
+        all_quarterly_products.sort(key=lambda x: x.get("distance_to_query", 1000.0))
+        
+        # Take the first 4 products (or all if less than 4)
+        quarterly_products = all_quarterly_products[:min(4, len(all_quarterly_products))]
     
-    # Sort features by distance (closest first)
-    processed_features.sort(key=lambda x: x['distance_km'])
+    print(f"\nSelected {len(quarterly_products)} out of {len(all_quarterly_products)} quarterly products")
     
-    # Return all features up to max_records
-    selected_features = processed_features[:max_records]
-    print(f"Selected {len(selected_features)} tiles")
+    # Get the tile count
+    tile_count = len(quarterly_products)
     
-    # Create a result object
+    # Create the area entry
+    area = {
+        "year": year,
+        "productCount": tile_count,
+        "cityName": city_name,
+        "cityLat": city_lat,
+        "cityLon": city_lon,
+        "isNeighbor": is_neighbor,
+        "queryPointLat": lat,
+        "queryPointLon": lon,
+        "quarterlyProducts": quarterly_products
+    }
+    
+    # Create the final result structure
     result = {
-        'lat': lat,
-        'lon': lon,
-        'features': selected_features,
-        'count': len(selected_features),
-        'json_data': json_data,  # Include the full JSON data in the result
-        'is_mosaic': True,
-        # Add the city metadata to the result object as well
-        'city_name': city_name,
-        'city_lat': city_lat,
-        'city_lon': city_lon,
-        'is_neighbor': is_neighbor
+        "areas": [area],
+        "properties": {
+            "totalProducts": tile_count,
+            "totalAreas": 1,
+            "year": year,
+            "queryCoordinates": {
+                "lat": lat,
+                "lon": lon
+            }
+        }
     }
     
     return result
@@ -427,16 +599,18 @@ if __name__ == "__main__":
                         help="Latitude of the point of interest")
     parser.add_argument("--lon", type=float, required=True,
                         help="Longitude of the point of interest")
-    parser.add_argument("--start-date", type=str,
-                        help="Start date in format YYYY-MM-DD (default: based on year-filter)")
-    parser.add_argument("--end-date", type=str,
-                        help="End date in format YYYY-MM-DD (default: based on year-filter)")
-    parser.add_argument("--max-records", type=int, default=10,
-                        help="Maximum number of records to return (default: 10)")
+    parser.add_argument("--year", type=str, default="2023",
+                        help="Year to filter for (default: '2023')")
     parser.add_argument("--output-dir", type=str, default="results",
                         help="Directory to save output files")
-    parser.add_argument("--year-filter", type=str, default="2022",
-                        help="Year to filter for (e.g., '2022')")
+    parser.add_argument("--city-name", type=str,
+                        help="Name of the associated city")
+    parser.add_argument("--city-lat", type=float,
+                        help="Latitude of the associated city")
+    parser.add_argument("--city-lon", type=float,
+                        help="Longitude of the associated city")
+    parser.add_argument("--is-neighbor", type=bool, default=False,
+                        help="Whether this point is a neighbor/random point of a city")
     
     args = parser.parse_args()
     
@@ -444,25 +618,25 @@ if __name__ == "__main__":
     result = query_sentinel2_by_coordinates(
         lat=args.lat,
         lon=args.lon,
-        start_date=args.start_date,
-        end_date=args.end_date,
-        max_records=args.max_records,
+        year=args.year,
         output_dir=args.output_dir,
-        year_filter=args.year_filter
+        city_name=args.city_name,
+        city_lat=args.city_lat,
+        city_lon=args.city_lon,
+        is_neighbor=args.is_neighbor
     )
     
     # Print summary
     if result:
         print(f"\nSummary:")
         print(f"- Coordinates: ({args.lat}, {args.lon})")
-        print(f"- Found {result['count']} Sentinel-2 Global Mosaic tiles")
+        print(f"- Found {result['properties']['totalProducts']} Sentinel-2 Global Mosaic products")
         
         # Print details of each feature
-        for i, feature in enumerate(result['features']):
+        for i, product in enumerate(result['areas'][0]['quarterlyProducts']):
             print(f"\nFeature {i+1}:")
-            print(f"- Title: {feature['title']}")
-            print(f"- Start Date: {feature['start_date']}")
-            print(f"- Product Type: {feature['product_type']}")
-            if feature['tile_id']:
-                print(f"- Tile ID: {feature['tile_id']}")
-            print(f"- Distance: {feature['distance_km']:.2f} km") 
+            print(f"- Name: {product.get('Name', 'Unknown')}")
+            print(f"- ID: {product.get('Id', 'Unknown')}")
+            print(f"- Size: {product.get('ContentLength', 'Unknown')} bytes")
+            print(f"- Content Type: {product.get('ContentType', 'Unknown')}")
+            print(f"- Distance: {result['areas'][0]['distanceKm']:.2f} km") 

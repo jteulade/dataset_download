@@ -137,40 +137,80 @@ class SentinelDownloader:
         Returns:
             dict: The processed feature with tile information
         """
-        props = feature['properties']
-        title = props.get('title', 'Unknown')
+        # Check if this is the old JSON format (with properties key)
+        if 'properties' in feature:
+            props = feature['properties']
+            title = props.get('title', 'Unknown')
+            
+            # Extract tile ID from title
+            tile_id = None
+            parts = title.split('_')
+            if len(parts) >= 5:
+                tile_id = parts[4]  # Extract the tile ID part
+            
+            # Extract product ID for OData API
+            product_id = None
+            download_url = props.get('services', {}).get('download', {}).get('url')
+            if download_url:
+                match = re.search(r'/download/([a-f0-9-]+)', download_url)
+                if match:
+                    product_id = match.group(1)
+            
+            # Create a processed feature
+            processed_feature = {
+                'title': title,
+                'platform': props.get('platform', 'Unknown'),
+                'start_date': props.get('startDate', 'Unknown'),
+                'completion_date': props.get('completionDate', 'Unknown'),
+                'product_type': props.get('productType', 'Unknown'),
+                'tile_id': tile_id,
+                'download_url': download_url,
+                'product_id': product_id,
+                'city_name': props.get('city_name', 'Unknown'),
+                'distance_km': props.get('distance_km', 0),
+                'is_best_tile': props.get('is_best_tile', False),
+                'original_feature': feature
+            }
+            
+            return processed_feature
         
-        # Extract tile ID from title
-        tile_id = None
-        parts = title.split('_')
-        if len(parts) >= 5:
-            tile_id = parts[4]  # Extract the tile ID part
-        
-        # Extract product ID for OData API
-        product_id = None
-        download_url = props.get('services', {}).get('download', {}).get('url')
-        if download_url:
-            match = re.search(r'/download/([a-f0-9-]+)', download_url)
-            if match:
-                product_id = match.group(1)
-        
-        # Create a processed feature
-        processed_feature = {
-            'title': title,
-            'platform': props.get('platform', 'Unknown'),
-            'start_date': props.get('startDate', 'Unknown'),
-            'completion_date': props.get('completionDate', 'Unknown'),
-            'product_type': props.get('productType', 'Unknown'),
-            'tile_id': tile_id,
-            'download_url': download_url,
-            'product_id': product_id,
-            'city_name': props.get('city_name', 'Unknown'),
-            'distance_km': props.get('distance_km', 0),
-            'is_best_tile': props.get('is_best_tile', False),
-            'original_feature': feature
-        }
-        
-        return processed_feature
+        # New JSON format (quarterlyProducts)
+        else:
+            # Extract properties from the new format
+            title = feature.get('Name', 'Unknown')
+            
+            # Extract tile ID from title
+            tile_id = None
+            parts = title.split('_')
+            if len(parts) >= 5:
+                tile_id = parts[4]  # Extract the tile ID part
+            
+            # Extract product ID directly from the ID field
+            product_id = feature.get('Id')
+            
+            # Get download URL from restoProperties.services if available
+            download_url = None
+            resto_props = feature.get('restoProperties', {})
+            if 'services' in resto_props and 'download' in resto_props['services']:
+                download_url = resto_props['services']['download'].get('url')
+            
+            # Create a processed feature
+            processed_feature = {
+                'title': title,
+                'platform': resto_props.get('platform', 'Unknown'),
+                'start_date': resto_props.get('startDate', 'Unknown'),
+                'completion_date': resto_props.get('completionDate', 'Unknown'),
+                'product_type': resto_props.get('productType', 'Unknown'),
+                'tile_id': tile_id,
+                'download_url': download_url,
+                'product_id': product_id,
+                'city_name': None,  # Will be filled from parent area
+                'distance_km': 0,   # Will be filled from parent area if available
+                'is_best_tile': True,  # Assuming all tiles in the new format are "best" tiles
+                'original_feature': feature
+            }
+            
+            return processed_feature
     
     def search_tile_by_id(self, tile_id, year_filter=None):
         """
@@ -292,7 +332,7 @@ class SentinelDownloader:
         
         Args:
             feature (dict): The feature containing the tile information
-            output_dir (str): Directory to save the downloaded file
+            output_dir (str): Directory to save downloaded file
             
         Returns:
             str: Path to the downloaded file, or None if download failed
@@ -301,14 +341,38 @@ class SentinelDownloader:
             logger.error("Invalid feature")
             return None
         
+        # Get year and tile ID for directory structure
+        year = None
+        tile_id = feature.get('tile_id')
+        
+        # Extract year from start_date
+        start_date = feature.get('start_date', '')
+        if start_date and isinstance(start_date, str):
+            year_match = re.match(r'^(\d{4})', start_date)
+            if year_match:
+                year = year_match.group(1)
+        
+        # Create hierarchical directory structure if year and tile_id are available
+        if year and tile_id:
+            nested_dir = os.path.join(output_dir, year, tile_id)
+            logger.info(f"Using hierarchical directory structure: {nested_dir}")
+        else:
+            nested_dir = output_dir
+            logger.info(f"Using flat directory structure: {nested_dir}")
+            if not year:
+                logger.warning(f"Could not extract year from start_date: {start_date}")
+            if not tile_id:
+                logger.warning(f"No tile ID available for: {feature.get('title', 'Unknown')}")
+        
         # Create output directory if it doesn't exist
-        os.makedirs(output_dir, exist_ok=True)
+        os.makedirs(nested_dir, exist_ok=True)
         
         # Define output file path
         title = feature['title']
-        output_file = os.path.join(output_dir, f"{title}.zip")
+        output_file = os.path.join(nested_dir, f"{title}.zip")
         
         logger.info(f"Downloading tile: {title}")
+        logger.info(f"Output file: {output_file}")
         
         # Check if the token is valid
         if not self.is_token_valid():
@@ -345,6 +409,17 @@ class SentinelDownloader:
             
             if self._try_download(download_url, output_file):
                 return output_file
+            
+            # 3. If direct download fails, try to extract product ID from URL and use OData
+            if 'product_id' not in feature or not feature['product_id']:
+                match = re.search(r'/download/([a-f0-9-]+)', download_url)
+                if match:
+                    product_id = match.group(1)
+                    odata_url = f"{self.ODATA_URL}/Products({product_id})/$value"
+                    logger.info(f"Extracted product ID from URL, trying OData API: {odata_url}")
+                    
+                    if self._try_download(odata_url, output_file):
+                        return output_file
         
         # All download methods failed
         logger.error("All download methods failed")
@@ -474,7 +549,7 @@ class SentinelDownloader:
             logger.error(f"Download error: {e}")
             return False
 
-    def download_tiles_from_json(self, json_file, output_dir="downloads", best_tiles_only=True, limit=None):
+    def download_tiles_from_json(self, json_file, output_dir="downloads", best_tiles_only=True, limit=None, flat_structure=False):
         """
         Download tiles from a JSON file containing tile metadata.
         
@@ -483,6 +558,7 @@ class SentinelDownloader:
             output_dir (str): Directory to save downloaded files
             best_tiles_only (bool): Whether to download only tiles marked as best_tile
             limit (int, optional): Maximum number of tiles to download
+            flat_structure (bool): Whether to use a flat directory structure
             
         Returns:
             list: List of paths to downloaded files
@@ -492,16 +568,48 @@ class SentinelDownloader:
             with open(json_file, 'r') as f:
                 data = json.load(f)
             
-            # Check if the JSON file has the expected structure
-            if 'features' not in data:
-                logger.error(f"Invalid JSON file: {json_file} (missing 'features' key)")
+            # Handle different JSON formats
+            features = []
+            
+            # Check for new format with "areas" key
+            if 'areas' in data:
+                logger.info("Detected new JSON format with 'areas' key")
+                areas = data['areas']
+                logger.info(f"Found {len(areas)} areas in the JSON file")
+                
+                # Extract all quarterly products from all areas
+                for area in areas:
+                    city_name = area.get('cityName')
+                    distance_km = 0  # No distance in new format
+                    year = area.get('year')
+                    
+                    if 'quarterlyProducts' in area:
+                        quarterly_products = area['quarterlyProducts']
+                        logger.info(f"Found {len(quarterly_products)} quarterly products for {city_name} ({year})")
+                        
+                        for product in quarterly_products:
+                            # Add area information to the product
+                            product['area_info'] = {
+                                'city_name': city_name,
+                                'year': year,
+                                'distance_km': distance_km,
+                                'is_neighbor': area.get('isNeighbor', False)
+                            }
+                            features.append(product)
+            
+            # Check for old format with "features" key
+            elif 'features' in data:
+                logger.info("Detected old JSON format with 'features' key")
+                features = data['features']
+            
+            else:
+                logger.error(f"Invalid JSON file format: {json_file} (missing 'areas' or 'features' key)")
                 return []
             
-            features = data['features']
-            logger.info(f"Found {len(features)} features in the JSON file")
+            logger.info(f"Found a total of {len(features)} products/features in the JSON file")
             
-            # Filter features if best_tiles_only is True
-            if best_tiles_only:
+            # Filter features if best_tiles_only is True (only for old format)
+            if best_tiles_only and 'features' in data:
                 filtered_features = []
                 for feature in features:
                     if 'properties' in feature and feature['properties'].get('is_best_tile', False):
@@ -536,15 +644,38 @@ class SentinelDownloader:
                 # Extract tile information
                 processed_feature = self.extract_tile_info_from_feature(feature)
                 
-                # Download the tile
-                output_file = self.download_tile(processed_feature, output_dir)
+                # Add area information for new format
+                if 'area_info' in feature:
+                    processed_feature['city_name'] = feature['area_info']['city_name']
+                    processed_feature['distance_km'] = feature['area_info']['distance_km']
                 
-                if output_file:
-                    downloaded_files.append(output_file)
-                    logger.info(f"Successfully downloaded: {output_file}")
+                # Handle flat structure option
+                if flat_structure:
+                    # Create a custom download function that uses flat structure
+                    title = processed_feature['title']
+                    flat_output_file = os.path.join(output_dir, f"{title}.zip")
+                    logger.info(f"Using flat directory structure: {output_dir}")
+                    
+                    # Create output directory if it doesn't exist
+                    os.makedirs(output_dir, exist_ok=True)
+                    
+                    # Download using direct file path
+                    if self._download_tile_to_path(processed_feature, flat_output_file):
+                        downloaded_files.append(flat_output_file)
+                        logger.info(f"Successfully downloaded: {flat_output_file}")
+                    else:
+                        failed_downloads.append(processed_feature['title'])
+                        logger.error(f"Failed to download tile: {processed_feature['title']}")
                 else:
-                    failed_downloads.append(processed_feature['title'])
-                    logger.error(f"Failed to download tile: {processed_feature['title']}")
+                    # Use the standard download method with hierarchical structure
+                    output_file = self.download_tile(processed_feature, output_dir)
+                    
+                    if output_file:
+                        downloaded_files.append(output_file)
+                        logger.info(f"Successfully downloaded: {output_file}")
+                    else:
+                        failed_downloads.append(processed_feature['title'])
+                        logger.error(f"Failed to download tile: {processed_feature['title']}")
             
             # Log summary of failed downloads
             if failed_downloads:
@@ -567,6 +698,74 @@ class SentinelDownloader:
             logger.error(f"Stacktrace:\n{traceback.format_exc()}")
             return []
 
+    def _download_tile_to_path(self, feature, output_file):
+        """
+        Download a Sentinel-2 tile to a specific output file path (for flat structure).
+        
+        Args:
+            feature (dict): The feature containing the tile information
+            output_file (str): Path to save the downloaded file
+            
+        Returns:
+            bool: True if download was successful, False otherwise
+        """
+        if not feature:
+            logger.error("Invalid feature")
+            return False
+        
+        logger.info(f"Downloading tile to specific path: {output_file}")
+        
+        # Check if the token is valid
+        if not self.is_token_valid():
+            logger.info("Token is invalid, attempting to refresh")
+            # Try to refresh the token before downloading
+            try:
+                new_token_data = self.refresh_access_token()
+                if new_token_data:
+                    logger.info("Token refreshed successfully")
+                else:
+                    logger.warning("Token refresh failed, download may fail")
+            except Exception as e:
+                logger.warning(f"Error refreshing token: {e}")
+        else:
+            logger.info("Token is valid, proceeding with download")
+        
+        # Try different download methods in order of preference
+        
+        # 1. Try OData API if we have a product ID
+        if 'product_id' in feature and feature['product_id']:
+            product_id = feature['product_id']
+            odata_url = f"{self.ODATA_URL}/Products({product_id})/$value"
+            logger.info(f"Trying OData API download URL: {odata_url}")
+            
+            if self._try_download(odata_url, output_file):
+                return True
+            
+            logger.warning("OData API download failed, trying direct download URL")
+        
+        # 2. Try direct download URL
+        if 'download_url' in feature and feature['download_url']:
+            download_url = feature['download_url']
+            logger.info(f"Trying direct download URL: {download_url}")
+            
+            if self._try_download(download_url, output_file):
+                return True
+            
+            # 3. If direct download fails, try to extract product ID from URL and use OData
+            if 'product_id' not in feature or not feature['product_id']:
+                match = re.search(r'/download/([a-f0-9-]+)', download_url)
+                if match:
+                    product_id = match.group(1)
+                    odata_url = f"{self.ODATA_URL}/Products({product_id})/$value"
+                    logger.info(f"Extracted product ID from URL, trying OData API: {odata_url}")
+                    
+                    if self._try_download(odata_url, output_file):
+                        return True
+        
+        # All download methods failed
+        logger.error("All download methods failed")
+        return False
+
 def main():
     """Main function to parse arguments and download tiles."""
     parser = argparse.ArgumentParser(description="Download Sentinel-2 tiles based on metadata from a JSON file")
@@ -584,7 +783,7 @@ def main():
     parser.add_argument("--year-filter", type=str,
                         help="Year to filter for (e.g., '2022')")
     parser.add_argument("--output-dir", type=str, default="downloads",
-                        help="Directory to save downloaded files")
+                        help="Base directory to save downloaded files (default: 'downloads')")
     parser.add_argument("--token-file", type=str,
                         help="Path to the Copernicus Data Space token file")
     parser.add_argument("--debug", action="store_true",
@@ -595,6 +794,8 @@ def main():
                         help="Disable progress bars (useful for logging to file)")
     parser.add_argument("--chunk-size", type=int, default=1,
                         help="Download chunk size in MB (default: 1, larger values may improve speed)")
+    parser.add_argument("--flat-structure", action="store_true",
+                        help="Use a flat directory structure instead of organizing by year/tile ID")
     
     # JSON file specific arguments
     parser.add_argument("--all-tiles", action="store_true",
@@ -633,19 +834,54 @@ def main():
             json_file=args.json_file,
             output_dir=args.output_dir,
             best_tiles_only=not args.all_tiles,
-            limit=args.limit
+            limit=args.limit,
+            flat_structure=args.flat_structure
         )
         
         # Print summary
         print(f"\nDownload Summary:")
         print(f"- JSON file: {args.json_file}")
         print(f"- Downloaded {len(downloaded_files)} tiles")
-        print(f"- Output directory: {args.output_dir}")
+        print(f"- Base output directory: {args.output_dir}")
+        print(f"- Directory structure: {'Flat' if args.flat_structure else 'Hierarchical (year/tile_id)'}")
+        
+        # Determine the JSON format type for better output
+        try:
+            with open(args.json_file, 'r') as f:
+                data = json.load(f)
+                if 'areas' in data:
+                    json_format = "new unified format (2023)"
+                else:
+                    json_format = "old format"
+                print(f"- JSON format: {json_format}")
+                
+                # Show areas summary for the new format
+                if 'areas' in data:
+                    areas = data['areas']
+                    print(f"- Areas in file: {len(areas)}")
+                    cities = [area.get('cityName', 'Unknown') for area in areas]
+                    years = [area.get('year', 'Unknown') for area in areas]
+                    unique_cities = sorted(set(cities))
+                    unique_years = sorted(set(years))
+                    print(f"- Cities: {', '.join(unique_cities)}")
+                    print(f"- Years: {', '.join(unique_years)}")
+        except Exception:
+            pass
         
         if downloaded_files:
-            print("\nDownloaded files:")
+            # Group files by directory for better organization in the output
+            files_by_dir = {}
             for file in downloaded_files:
-                print(f"- {file}")
+                dir_name = os.path.dirname(file)
+                if dir_name not in files_by_dir:
+                    files_by_dir[dir_name] = []
+                files_by_dir[dir_name].append(os.path.basename(file))
+            
+            print("\nDownloaded files by directory:")
+            for dir_name, files in sorted(files_by_dir.items()):
+                print(f"- {dir_name}/")
+                for file in sorted(files):
+                    print(f"  - {file}")
                 
             # Print total size of downloaded files
             total_size_bytes = sum(os.path.getsize(file) for file in downloaded_files)
@@ -679,6 +915,11 @@ def main():
                 print(f"- Start Date: {feature['start_date']}")
                 print(f"- Product Type: {feature['product_type']}")
                 print(f"- Downloaded to: {output_file}")
+                
+                # Print file size
+                file_size_bytes = os.path.getsize(output_file)
+                file_size_mb = file_size_bytes / (1024 * 1024)
+                print(f"- File size: {file_size_mb:.2f} MB")
             else:
                 print(f"Failed to download tile {args.tile_id}")
         else:
