@@ -101,6 +101,25 @@ python download_land_polygons.py
    - Increase the number of attempts with `--max-land-attempts 30`
    - Disable land detection with `--ensure-on-land=False`
 
+### Authentication Issues
+
+If you're experiencing 401 or 403 errors:
+
+1. Make sure your token is valid and not expired:
+   ```bash
+   ./get_token.sh
+   ```
+
+2. The tool now includes automatic token refresh, but if you're still having issues:
+   - Check that your refresh token is valid in the token file
+   - Ensure your Copernicus account has the proper access permissions
+   - Try manually generating a new token if automatic refresh fails
+
+3. For persistent authentication problems:
+   - Look for error messages about token refresh failures in the console output
+   - Verify network connectivity to Copernicus Data Space API endpoints
+   - Check if your account has any limitations on API usage or rate limits
+
 ## License
 
 This project is open source and available under the MIT License.
@@ -118,6 +137,29 @@ This tool queries Sentinel-2 Global Mosaics data for geographically dispersed ci
 - Select the best (closest) tile for each location
 - Create an interactive map showing cities, random points, and their associated tiles
 - Multiple base maps including satellite view for better visualization
+
+## Recent Updates
+
+### Token Refresh Mechanism
+
+- Automatic token refresh when 401/403 errors are encountered
+- Improved error handling for API requests with retry mechanism
+- Token validation before making requests
+- Prevents session timeouts during long-running queries
+
+### Point and Tile Selection Improvements
+
+- Enhanced point selection to ensure points are inside the tile boundaries
+- Improved random point generation to select points outside the city tile
+- Better prioritization of tiles that contain the query point
+- Fixed issue where random points were sometimes placed outside their associated tiles
+
+### Query Consolidation
+
+- Created a unified JSON output file that consolidates all queries
+- Added descriptive metadata to the unified output
+- Combined all areas into a single structure for easier processing
+- Improved structure with `totalProducts` and `totalAreas` counters
 
 ## Installation
 
@@ -208,6 +250,41 @@ The map shows:
 - Sentinel-2 tiles as colored polygons
 - Lines connecting cities to their random points
 - Multiple base maps including satellite view that can be toggled using the layer control
+
+### Technical Implementation
+
+#### Point Selection Algorithm
+
+The tool uses the following approach to ensure points are properly selected:
+
+1. For city centers:
+   - Queries tile information for the exact coordinates
+   - Prioritizes products that contain the query point (using geometry boundaries)
+   - Selects the 4 quarterly products that are closest to the city center
+
+2. For random points:
+   - Generates a random point at the specified distance from the city
+   - Ensures the random point is outside the city's tile footprint
+   - Checks if the point is on land (if enabled)
+   - Prioritizes tiles that contain the random point
+   - Connects the random point to the city with a line on the map
+
+#### Token Refresh Mechanism
+
+The tool implements a robust token handling system:
+
+1. Token validation before making requests:
+   - Checks if the current token is valid by making a test API call
+   - Automatically refreshes expired tokens using the refresh token
+   - Falls back to manual token generation if refresh fails
+
+2. Request retry logic:
+   - Detects 401/403 authentication errors during API calls
+   - Automatically refreshes the token when these errors occur
+   - Retries the request with the new token
+   - Maximum of 2 retry attempts per request
+
+This approach ensures uninterrupted execution even during long-running queries that might exceed the token's lifetime.
 
 ### Tile Metadata
 
