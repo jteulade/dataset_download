@@ -17,7 +17,7 @@ from map_visualizer import create_mosaic_map
 
 def main():
     parser = argparse.ArgumentParser(description="Query Sentinel-2 Global Mosaics data for dispersed cities and visualize the results")
-    parser.add_argument("--cities-csv", type=str, required=True,
+    parser.add_argument("--cities-csv", type=str, default="worldcities.csv",
                         help="Path to the CSV file containing city data (e.g., worldcities.csv)")
     parser.add_argument("--num-cities", type=int, default=20,
                         help="Number of geographically dispersed cities to select")
@@ -37,6 +37,10 @@ def main():
                         help="Maximum attempts to find a random point on land (default: 10)")
     parser.add_argument("--download-land-data", action="store_true", default=False,
                         help="Download land polygon data before starting")
+    parser.add_argument("--min-city-distance", type=int, default=500,
+                        help="Minimum distance between cities in kilometers (default: 500)")
+    parser.add_argument("--skip-post-processing", action="store_true", default=False,
+                        help="Skip post-processing step to ensure minimum city distance")
     
     args = parser.parse_args()
     
@@ -58,7 +62,12 @@ def main():
     cities_df = load_city_data(args.cities_csv, args.population_min)
     
     # Step 2: Select dispersed cities
-    selected_cities = select_dispersed_cities(cities_df, args.num_cities)
+    selected_cities = select_dispersed_cities(
+        cities_df, 
+        args.num_cities,
+        min_distance_km=args.min_city_distance,
+        apply_post_processing=not args.skip_post_processing
+    )
     print(f"Selected {len(selected_cities)} dispersed cities")
     
     # Save selected cities to CSV
