@@ -11,9 +11,9 @@ import argparse
 import os
 import json
 from datetime import datetime
-from city_selector import load_city_data, select_dispersed_cities
-from sentinel_query import query_sentinel2_by_coordinates, get_random_point_at_distance, is_point_on_land
-from map_visualizer import create_mosaic_map
+from src.city_selector import load_city_data, select_dispersed_cities
+from src.sentinel_query import query_sentinel2_by_coordinates, get_random_point_at_distance, is_point_on_land
+from src.map_visualizer import create_mosaic_map
 
 def main():
     parser = argparse.ArgumentParser(description="Query Sentinel-2 Global Mosaics data for dispersed cities and visualize the results")
@@ -44,10 +44,19 @@ def main():
     
     args = parser.parse_args()
     
+    # Always refresh the token before starting
+    from src.token_manager import get_access_token
+    print("Refreshing token before starting")
+    refreshed = get_access_token()
+    if refreshed:
+        print("Token refreshed successfully")
+    else:
+        print("Failed to refresh token. Will try to generate a new one when needed.")
+    
     # Download land polygon data if requested
     if args.download_land_data:
         try:
-            from download_land_polygons import download_natural_earth_land
+            from src.download_land_polygons import download_natural_earth_land
             print("Downloading land polygon data...")
             success = download_natural_earth_land()
             if success:
@@ -209,6 +218,9 @@ def main():
         # Generate a random point at the specified distance and query for it
         print(f"\nGenerating random point {args.random_distance} km away from {city_name}...")
         
+        # Initialize random_point_result as None in case all the following code paths fail
+        random_point_result = None
+        
         # Before generating a random point, let's check if we have a valid city tile footprint
         if cities_results and cities_results[-1].get('count', 0) > 0 and cities_results[-1].get('features', []):
             city_feature = cities_results[-1]['features'][0]
@@ -237,7 +249,8 @@ def main():
             # If we found the city tile footprint, generate points within a sensible distance
             # but also in a different tile
             if city_footprint_found and city_tile_id:
-                print(f"Found city tile footprint for {city_name} with ID {city_tile_id}")
+                # Log city footprint info without printing
+                city_footprint_info = f"Found city tile footprint for {city_name} with ID {city_tile_id}"
                 
                 # Create a polygon from the coordinates
                 from shapely.geometry import Polygon, Point
@@ -504,6 +517,10 @@ def main():
     print(f"- Random points skipped: {skipped_random_points} ({skipped_percent:.1f}% of attempted points)")
     print(f"- Interactive map saved to {args.output_map}")
     print(f"- Unified JSON with {unified_result['properties']['totalAreas']} areas and {unified_result['properties']['totalProducts']} products saved to {unified_file}")
+    
+    print("\n=== Process Complete ===")
+    print(f"You can now use the download_from_json.py script to download the tiles:")
+    print(f"python download_from_json.py --json-file {unified_file} --output-dir downloads")
 
 if __name__ == "__main__":
     main() 

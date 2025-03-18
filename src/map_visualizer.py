@@ -10,6 +10,31 @@ from folium.plugins import MeasureControl, MiniMap, MarkerCluster
 import random
 import os
 from shapely.geometry import Polygon, Point
+import math
+
+def haversine_distance(point1, point2):
+    """
+    Calculate the haversine distance between two points.
+    
+    Args:
+        point1: Tuple of (latitude, longitude)
+        point2: Tuple of (latitude, longitude)
+        
+    Returns:
+        Distance in kilometers
+    """
+    # Convert to radians
+    lat1, lon1 = point1
+    lat2, lon2 = point2
+    lon1, lat1, lon2, lat2 = map(math.radians, [lon1, lat1, lon2, lat2])
+    
+    # Haversine formula
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+    c = 2 * math.asin(math.sqrt(a))
+    r = 6371  # Radius of Earth in kilometers
+    return c * r
 
 def create_mosaic_map(cities_results, output_file='maps/city_mosaics_map.html'):
     """
@@ -205,6 +230,7 @@ def create_mosaic_map(cities_results, output_file='maps/city_mosaics_map.html'):
         for i, feature in enumerate(result['features']):
             try:
                 coords = []
+                footprint_source = None
                 
                 # First try to get the footprint from the feature properties
                 footprint = feature.get('footprint')
@@ -221,29 +247,47 @@ def create_mosaic_map(cities_results, output_file='maps/city_mosaics_map.html'):
                                 lon_str, lat_str = parts[0], parts[1]
                                 coords.append([float(lat_str), float(lon_str)])
                         except (ValueError, IndexError) as e:
-                            print(f"Warning: Error parsing coordinate {coord_str}: {e}")
+                            # Silently continue when a coordinate can't be parsed
+                            pass
+                    
+                    if len(coords) >= 3:
+                        footprint_source = "WKT String"
                 
                 # If no valid footprint, try to get geometry from the original feature
                 if len(coords) < 3:
                     # Try to extract geometry from the original_feature
-                    original_feature = feature.get('original_feature')
-                    if original_feature:
-                        # First try direct restoGeometry
-                        if 'restoGeometry' in original_feature:
-                            geom = original_feature['restoGeometry']
-                            if 'type' in geom and geom['type'] == 'Polygon' and 'coordinates' in geom:
-                                # Get coordinates from the geometry
-                                geometry_coords = geom['coordinates'][0]
-                                coords = [[coord[1], coord[0]] for coord in geometry_coords]  # Swap lon/lat to lat/lon for folium
-                        # Then try standard geometry
-                        elif 'geometry' in original_feature and original_feature['geometry']['type'] == 'Polygon':
+                    original_feature = feature.get('original_feature', {})
+                    
+                    # Check for restoGeometry (OpenSearch format)
+                    if 'restoGeometry' in original_feature:
+                        geom = original_feature['restoGeometry']
+                        if 'type' in geom and geom['type'] == 'Polygon' and 'coordinates' in geom:
                             # Get coordinates from the geometry
-                            geometry_coords = original_feature['geometry']['coordinates'][0]
+                            geometry_coords = geom['coordinates'][0]
                             coords = [[coord[1], coord[0]] for coord in geometry_coords]  # Swap lon/lat to lat/lon for folium
+                            if len(coords) >= 3:
+                                footprint_source = "restoGeometry"
+                    
+                    # Try standard geometry (STAC format)
+                    if len(coords) < 3 and 'geometry' in original_feature:
+                        geom = original_feature['geometry']
+                        if geom and isinstance(geom, dict) and geom.get('type') == 'Polygon' and 'coordinates' in geom:
+                            geometry_coords = geom['coordinates'][0]
+                            coords = [[coord[1], coord[0]] for coord in geometry_coords]  # Swap lon/lat to lat/lon for folium
+                            if len(coords) >= 3:
+                                footprint_source = "GeoJSON geometry"
+                    
+                    # Try GeoFootprint (OData format)
+                    if len(coords) < 3 and 'GeoFootprint' in original_feature:
+                        geom = original_feature['GeoFootprint']
+                        if geom and isinstance(geom, dict) and geom.get('type') == 'Polygon' and 'coordinates' in geom:
+                            geometry_coords = geom['coordinates'][0]
+                            coords = [[coord[1], coord[0]] for coord in geometry_coords]  # Swap lon/lat to lat/lon for folium
+                            if len(coords) >= 3:
+                                footprint_source = "GeoFootprint"
                 
-                # If still no valid coordinates, skip this feature
+                # If still no valid coordinates, create a fallback silently
                 if len(coords) < 3:
-                    print(f"Warning: Could not find valid footprint for tile {feature.get('title', 'Unknown')}")
                     # Try to create a simple square around the point as fallback
                     if result['count'] > 0:
                         # Create a simple square around the point (approximately 20km)
@@ -257,9 +301,12 @@ def create_mosaic_map(cities_results, output_file='maps/city_mosaics_map.html'):
                             [lat - box_size, lon - box_size],
                         ]
                         coords = box_coords
-                        print(f"Created fallback square footprint for {feature.get('title', 'Unknown')}")
+                        footprint_source = "fallback square"
                     else:
                         continue
+                
+                # Store the footprint source for logging (without warnings)
+                feature['footprint_source'] = footprint_source
                 
                 # Check if the point is within the polygon
                 point_in_polygon = False
@@ -273,30 +320,21 @@ def create_mosaic_map(cities_results, output_file='maps/city_mosaics_map.html'):
                     point_in_polygon = polygon.contains(Point(point))
                     
                     if not point_in_polygon and is_random_point:
-                        print(f"Warning: Random point {lat}, {lon} is not within its tile footprint")
+                        # Store the information instead of printing a warning
+                        feature['point_within_footprint'] = False
                         
                         # Calculate the distance from the point to the polygon
                         from shapely.ops import nearest_points
                         point_shape = Point(point)
                         nearest_point = nearest_points(point_shape, polygon)[1]
                         
-                        # Calculate distance in kilometers
-                        import math
-                        lon1, lat1 = point
-                        lon2, lat2 = nearest_point.x, nearest_point.y
-                        
-                        # Convert to radians
-                        lon1, lat1, lon2, lat2 = map(math.radians, [lon1, lat1, lon2, lat2])
-                        
-                        # Haversine formula
-                        dlon = lon2 - lon1
-                        dlat = lat2 - lat1
-                        a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
-                        c = 2 * math.asin(math.sqrt(a))
-                        r = 6371  # Radius of Earth in kilometers
-                        distance_to_tile = c * r
-                        
-                        print(f"  Distance to nearest point on tile footprint: {distance_to_tile:.2f} km")
+                        # Calculate haversine distance in kilometers
+                        distance_to_tile = haversine_distance(
+                            (point[1], point[0]),  # Convert lon/lat to lat/lon
+                            (nearest_point.y, nearest_point.x)  # Convert lon/lat to lat/lon
+                        )
+                        # Store the distance instead of printing it
+                        feature['distance_to_footprint'] = distance_to_tile
                 except Exception as e:
                     print(f"Error checking if point is in polygon: {e}")
                 
@@ -343,12 +381,9 @@ def create_mosaic_map(cities_results, output_file='maps/city_mosaics_map.html'):
                 <b>Title:</b> {feature['title']}<br>
                 """
                 
-                if not point_in_polygon and is_random_point:
-                    popup_html += f"<b>Warning:</b> Random point is not within this tile footprint<br>"
-                    try:
-                        popup_html += f"<b>Distance to tile boundary:</b> {distance_to_tile:.2f} km<br>"
-                    except:
-                        pass
+                # Add warning if the random point is not within the tile footprint
+                if not feature.get('point_within_footprint', True) and is_random_point:
+                    popup_html += f"<b>Note:</b> Point is outside tile boundary ({feature.get('distance_to_footprint', 0):.2f} km away)<br>"
                 
                 if 'start_date' in feature:
                     popup_html += f"<b>Start Date:</b> {feature['start_date']}<br>"

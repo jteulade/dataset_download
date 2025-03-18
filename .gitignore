@@ -8,3 +8,12 @@ copernicus_dataspace_token.json
 *.env
 .DS_Store
 *.swp
+
+# Authentication tokens
+.env
+*_credentials.*
+*.pem
+*.key
+
+# Sensitive data
+.credentials/

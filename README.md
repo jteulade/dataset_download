@@ -24,12 +24,30 @@ A Python script for downloading Sentinel-2 tiles by their ID from the Copernicus
 To download tiles, you need a valid Copernicus Data Space API token. Follow these steps:
 
 1. Register for an account at [Copernicus Data Space Ecosystem](https://dataspace.copernicus.eu/)
-2. Generate an API token from your account
-3. Create a token file using the provided template:
+2. Generate an API token using the Python token manager:
+
+   There are two ways to use the token manager:
+   
+   **Option 1: Using environment variables (recommended for security)**
+   ```bash
+   export COPERNICUS_USERNAME="your-email@example.com"
+   export COPERNICUS_PASSWORD="your-password"
+   python -m src.utils.token_manager
    ```
-   cp copernicus_dataspace_token_template.json ~/copernicus_dataspace_token.json
+   
+   **Option 2: Interactive prompt**
+   ```bash
+   python -m src.utils.token_manager
+   # The script will prompt you for your username and password
    ```
-4. Edit the token file and replace the placeholder values with your actual tokens
+
+   This will create a token file at `copernicus_dataspace_token.json` in your project root directory
+
+3. The token will be automatically used by the scripts in this repository
+
+> **⚠️ SECURITY WARNING:**
+> Never commit your credentials to version control.
+> Always use environment variables or interactive prompts for authentication.
 
 ## Usage
 
@@ -54,8 +72,7 @@ This will show you examples of available tile IDs for the specified year.
 ```bash
 ./sentinel_tile_downloader.py --tile-id "TILE_ID" 
                              [--year-filter "YEAR"] 
-                             [--output-dir "DIRECTORY"] 
-                             [--token-file "PATH_TO_TOKEN_FILE"]
+                             [--output-dir "DIRECTORY"]
                              [--debug]
                              [--list-available]
 ```
@@ -63,7 +80,6 @@ This will show you examples of available tile IDs for the specified year.
 - `--tile-id`: The Sentinel-2 tile ID to download (required)
 - `--year-filter`: Year to filter for (e.g., '2022') (optional)
 - `--output-dir`: Directory to save downloaded files (default: "downloads")
-- `--token-file`: Path to the Copernicus Data Space token file (optional)
 - `--debug`: Enable debug logging
 - `--list-available`: List available tiles when the specified tile ID is not found
 
@@ -79,12 +95,6 @@ This will show you examples of available tile IDs for the specified year.
 
 ```bash
 ./sentinel_tile_downloader.py --tile-id "any" --year-filter "2023" --list-available
-```
-
-### Download with a custom token file location
-
-```bash
-./sentinel_tile_downloader.py --tile-id "11SMB" --token-file "/path/to/token.json"
 ```
 
 ## Troubleshooting
@@ -105,20 +115,20 @@ python download_land_polygons.py
 
 If you're experiencing 401 or 403 errors:
 
-1. Make sure your token is valid and not expired:
+1. The system automatically refreshes tokens before each run, but if you're still having issues:
    ```bash
-   ./get_token.sh
+   python -m src.utils.token_manager
    ```
 
-2. The tool now includes automatic token refresh, but if you're still having issues:
-   - Check that your refresh token is valid in the token file
-   - Ensure your Copernicus account has the proper access permissions
-   - Try manually generating a new token if automatic refresh fails
+2. For manual token refresh:
+   ```bash
+   python -m src.token_manager
+   ```
 
 3. For persistent authentication problems:
-   - Look for error messages about token refresh failures in the console output
    - Verify network connectivity to Copernicus Data Space API endpoints
    - Check if your account has any limitations on API usage or rate limits
+   - Ensure your Copernicus account has the proper access permissions
 
 ## License
 
@@ -142,10 +152,12 @@ This tool queries Sentinel-2 Global Mosaics data for geographically dispersed ci
 
 ### Token Refresh Mechanism
 
-- Automatic token refresh when 401/403 errors are encountered
+- Automatic token refresh at the start of each script run
 - Improved error handling for API requests with retry mechanism
-- Token validation before making requests
+- Tokens always refreshed without manual intervention 
 - Prevents session timeouts during long-running queries
+- Request retry logic that detects authentication errors and automatically refreshes tokens
+- Maximum of 2 retry attempts per request
 
 ### Point and Tile Selection Improvements
 
@@ -271,12 +283,12 @@ The tool uses the following approach to ensure points are properly selected:
 
 #### Token Refresh Mechanism
 
-The tool implements a robust token handling system:
+Our scripts implement a robust token handling system that requires no manual intervention:
 
-1. Token validation before making requests:
-   - Checks if the current token is valid by making a test API call
-   - Automatically refreshes expired tokens using the refresh token
-   - Falls back to manual token generation if refresh fails
+1. Automatic token refresh:
+   - Every script run starts with a fresh token
+   - No need for manual refresh commands
+   - Falls back to credential prompts if refresh fails
 
 2. Request retry logic:
    - Detects 401/403 authentication errors during API calls
@@ -313,4 +325,40 @@ This metadata is stored in the JSON files and displayed in the interactive map p
 
 ## License
 
-This project is open source and available under the MIT License. 
+This project is open source and available under the MIT License.
+
+## Project Structure
+
+The repository has been organized with a simplified flat structure:
+
+```
+dataset_download/
+│
+├── main.py                      # Main entry point for the application
+├── requirements.txt             # Project dependencies
+├── worldcities.csv              # Dataset of world cities
+│
+├── src/                         # Source code package
+│   ├── __init__.py
+│   ├── sentinel_city_explorer.py    # Core application logic
+│   ├── sentinel_query.py            # Sentinel data query functions
+│   ├── sentinel_tile_downloader.py  # Tile downloading functionality
+│   ├── city_selector.py             # City data processing
+│   ├── map_visualizer.py            # Map visualization
+│   ├── download_land_polygons.py    # Land polygon utilities
+│   └── token_manager.py             # Token management system
+│
+├── data/                        # Data storage
+├── results/                     # Results storage
+└── maps/                        # Generated maps storage
+```
+
+## Running with the New Structure
+
+You can run the application using the main.py file:
+
+```bash
+python main.py --num-cities 10 --population-min 1000000
+```
+
+This will use the same functionality as before but with a more organized code structure. 
