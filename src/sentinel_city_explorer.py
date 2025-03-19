@@ -41,8 +41,26 @@ def main():
                         help="Minimum distance between cities in kilometers (default: 500)")
     parser.add_argument("--skip-post-processing", action="store_true", default=False,
                         help="Skip post-processing step to ensure minimum city distance")
+    parser.add_argument("--random-seed", type=int, default=None,
+                        help="Random seed for reproducible results")
     
     args = parser.parse_args()
+    
+    # Set random seed if provided
+    if args.random_seed is not None:
+        import random
+        import numpy as np
+        random.seed(args.random_seed)
+        np.random.seed(args.random_seed)
+        print(f"Set random seed to {args.random_seed}")
+    else:
+        # If no seed provided, generate one and use it
+        import random
+        import numpy as np
+        random_seed = random.randint(0, 2**32 - 1)
+        random.seed(random_seed)
+        np.random.seed(random_seed)
+        print(f"Using generated random seed: {random_seed}")
     
     # Always refresh the token before starting
     from src.token_manager import get_access_token
@@ -96,7 +114,22 @@ def main():
         "properties": {
             "totalProducts": 0,
             "totalAreas": 0,
-            "description": "Combined Sentinel-2 Global Mosaics data for selected cities and random neighbor points"
+            "description": "Combined Sentinel-2 Global Mosaics data for selected cities and random neighbor points",
+            "command_line_args": {
+                "cities_csv": args.cities_csv,
+                "num_cities": args.num_cities,
+                "population_min": args.population_min,
+                "output_dir": args.output_dir,
+                "output_map": args.output_map,
+                "year_filter": args.year_filter,
+                "random_distance": args.random_distance,
+                "ensure_on_land": args.ensure_on_land,
+                "max_land_attempts": args.max_land_attempts,
+                "download_land_data": args.download_land_data,
+                "min_city_distance": args.min_city_distance,
+                "skip_post_processing": args.skip_post_processing,
+                "random_seed": args.random_seed if args.random_seed is not None else random_seed
+            }
         }
     }
     
