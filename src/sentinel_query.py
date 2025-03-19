@@ -23,7 +23,7 @@ _LAND_POLYGONS = None
 
 # Create data directory path
 # First, get the project root directory (parent of src)
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Use a common data directory in the project root
 data_dir = os.path.join(project_root, 'data')
 os.makedirs(data_dir, exist_ok=True)

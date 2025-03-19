@@ -22,8 +22,7 @@ def download_natural_earth_land():
     """
     # Get project root directory (parent of src)
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    src_dir = os.path.dirname(script_dir)
-    project_root = os.path.dirname(src_dir)
+    project_root = os.path.dirname(script_dir)
     
     # Use a common data directory in the project root
     data_dir = os.path.join(project_root, 'data')
@@ -59,16 +58,14 @@ def download_natural_earth_land():
             # Try alternative URLs
             if download_from_alternative_url(data_dir):
                 return True
-            # If all download methods fail, create simplified land file
-            return create_simplified_land_file(data_dir)
+            return False
             
     except Exception as e:
         print(f"Error downloading land polygons: {e}")
         # Try alternative URLs
         if download_from_alternative_url(data_dir):
             return True
-        # If all download methods fail, create simplified land file
-        return create_simplified_land_file(data_dir)
+        return False
 
 def download_from_alternative_url(data_dir):
     """
@@ -110,85 +107,11 @@ def download_from_alternative_url(data_dir):
     
     return False
 
-def create_simplified_land_file(data_dir):
-    """
-    Create a simplified land polygons file as a fallback.
-    
-    Args:
-        data_dir (str): Directory to save the simplified land file to
-        
-    Returns:
-        bool: True if creation was successful, False otherwise
-    """
-    try:
-        import geopandas as gpd
-        from shapely.geometry import Polygon
-        
-        print("Creating simplified land polygons")
-        
-        # Define simplified polygons for major continents
-        # These are very rough approximations - expanded to cover more coastal areas
-        continents = {
-            'North America': [
-                (-175, 85), (-45, 85), (-45, 0), (-175, 0)
-            ],
-            'South America': [
-                (-95, 20), (-25, 20), (-25, -65), (-95, -65)
-            ],
-            'Europe': [
-                (-15, 75), (50, 75), (50, 30), (-15, 30)
-            ],
-            'Africa': [
-                (-25, 45), (60, 45), (60, -45), (-25, -45)
-            ],
-            'Asia': [
-                (35, 85), (185, 85), (185, -5), (35, -5)
-            ],
-            'Australia': [
-                (105, -5), (160, -5), (160, -50), (105, -50)
-            ],
-            'Antarctica': [
-                (-185, -55), (185, -55), (185, -95), (-185, -95)
-            ],
-            # Add more regions to cover islands and coastal areas
-            'Caribbean': [
-                (-90, 30), (-55, 30), (-55, 10), (-90, 10)
-            ],
-            'Southeast Asia': [
-                (90, 25), (130, 25), (130, -10), (90, -10)
-            ],
-            'Pacific Islands': [
-                (130, 30), (180, 30), (180, -30), (130, -30)
-            ]
-        }
-        
-        # Convert to shapely polygons
-        polygons = []
-        names = []
-        
-        for name, coords in continents.items():
-            poly = Polygon(coords)
-            polygons.append(poly)
-            names.append(name)
-        
-        # Create a GeoDataFrame
-        gdf = gpd.GeoDataFrame({'name': names, 'geometry': polygons})
-        
-        # Save to a shapefile
-        shapefile = os.path.join(data_dir, 'ne_110m_land.shp')
-        gdf.to_file(shapefile)
-        
-        print(f"Successfully created simplified land polygons file at {shapefile}")
-        return True
-    except Exception as e:
-        print(f"Error creating simplified land polygons: {e}")
-        return False
-
 if __name__ == "__main__":
     print("Downloading Natural Earth land polygons for Sentinel City Explorer")
     success = download_natural_earth_land()
     if success:
         print("Land polygon data is now available for the Sentinel City Explorer")
     else:
-        print("Failed to download or create land polygon data")
+        print("Failed to download land polygon data")
         sys.exit(1)
