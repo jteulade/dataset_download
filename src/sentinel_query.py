@@ -157,18 +157,17 @@ def query_sentinel2_by_coordinates(lat, lon, year="2023", output_dir="results",
                 product_entry["quarter"] = quarter
                 
                 # Check if this product contains the query point
-                if 'restoGeometry' in product and 'coordinates' in product['restoGeometry']:
+                if 'GeoFootprint' in product and 'coordinates' in product['GeoFootprint']:
                     try:
-                        if product['restoGeometry']['type'] == 'Polygon':
+                        if product['GeoFootprint']['type'] == 'Polygon':
                             # Extract coordinates - they are in [lon, lat] format in the API response
-                            coords = product['restoGeometry']['coordinates'][0]
+                            coords = product['GeoFootprint']['coordinates'][0]
                             
-                            # Create a polygon from the coordinates
-                            polygon_coords = [(c[1], c[0]) for c in coords]  # Convert to (lat, lon) for shapely
-                            tile_polygon = Polygon(polygon_coords)
+                            # Create a polygon from the coordinates - keep as [lon, lat] for Shapely
+                            tile_polygon = Polygon(coords)
                             
                             # Check if the query point is inside this polygon
-                            query_point = Point(lon, lat)  # Note: Point takes (x, y) which is (lon, lat)
+                            query_point = Point(lon, lat)  # Point takes (x, y) which is (lon, lat)
                             
                             if tile_polygon.contains(query_point):
                                 print(f"Found product that contains the query point: {product.get('Name')}")
