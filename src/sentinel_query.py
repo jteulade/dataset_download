@@ -252,13 +252,13 @@ def is_point_on_land(lat, lon, debug=False):
                 print(f"Loading land polygons from {ne_file}")
                 _LAND_POLYGONS = gpd.read_file(ne_file)
             else:
-                # If file doesn't exist locally, use a simplified approach
-                print("Land polygon file not found. Using simplified continent polygons.")
-                _LAND_POLYGONS = _create_simplified_land_polygons()
+                # If file doesn't exist locally, return False as we can't determine if point is on land
+                warnings.warn("Land polygon file not found. Cannot determine if point is on land.")
+                return False
                 
         except Exception as e:
-            warnings.warn(f"Error loading land polygons: {e}. Using simplified continent polygons.")
-            _LAND_POLYGONS = _create_simplified_land_polygons()
+            warnings.warn(f"Error loading land polygons: {e}. Cannot determine if point is on land.")
+            return False
     
     # Check if the point is within any land polygon
     for idx, row in _LAND_POLYGONS.iterrows():
@@ -269,63 +269,6 @@ def is_point_on_land(lat, lon, debug=False):
             pass
     
     return False
-
-def _create_simplified_land_polygons():
-    """
-    Create a simplified set of land polygons for the major continents.
-    This is a fallback when the Natural Earth dataset is not available.
-    
-    Returns:
-        geopandas.GeoDataFrame: A GeoDataFrame with simplified continent polygons
-    """
-    # Define simplified polygons for major continents
-    # These are very rough approximations - expanded to cover more coastal areas
-    continents = {
-        'North America': [
-            (-175, 85), (-45, 85), (-45, 0), (-175, 0)
-        ],
-        'South America': [
-            (-95, 20), (-25, 20), (-25, -65), (-95, -65)
-        ],
-        'Europe': [
-            (-15, 75), (50, 75), (50, 30), (-15, 30)
-        ],
-        'Africa': [
-            (-25, 45), (60, 45), (60, -45), (-25, -45)
-        ],
-        'Asia': [
-            (35, 85), (185, 85), (185, -5), (35, -5)
-        ],
-        'Australia': [
-            (105, -5), (160, -5), (160, -50), (105, -50)
-        ],
-        'Antarctica': [
-            (-185, -55), (185, -55), (185, -95), (-185, -95)
-        ],
-        # Add more regions to cover islands and coastal areas
-        'Caribbean': [
-            (-90, 30), (-55, 30), (-55, 10), (-90, 10)
-        ],
-        'Southeast Asia': [
-            (90, 25), (130, 25), (130, -10), (90, -10)
-        ],
-        'Pacific Islands': [
-            (130, 30), (180, 30), (180, -30), (130, -30)
-        ]
-    }
-    
-    # Convert to shapely polygons
-    polygons = []
-    names = []
-    
-    for name, coords in continents.items():
-        poly = Polygon(coords)
-        polygons.append(poly)
-        names.append(name)
-    
-    # Create a GeoDataFrame
-    gdf = gpd.GeoDataFrame({'name': names, 'geometry': polygons})
-    return gdf
 
 def get_random_point_at_distance(lat, lon, distance_km, ensure_on_land=True, max_attempts=10, debug=False):
     """
