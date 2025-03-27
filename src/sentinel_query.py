@@ -184,10 +184,39 @@ def query_sentinel2_by_coordinates(lat, lon, year="2023", output_dir="results",
     # Select the most relevant products (prioritize those containing the query point)
     if products_containing_point:
         print(f"Found {len(products_containing_point)} products that contain the query point.")
-        # Only use products that contain the query point if there are any
-        final_products = products_containing_point
+        # Get the tile ID from the first product that contains the query point
+        best_tile_id = None
+        for product in products_containing_point:
+            if 'Name' in product:
+                parts = product['Name'].split('_')
+                if len(parts) >= 5:
+                    best_tile_id = parts[4]  # Extract the tile ID part
+                    break
+        
+        if best_tile_id:
+            # Filter to only keep products from the best tile
+            final_products = [p for p in products_containing_point 
+                            if 'Name' in p and best_tile_id in p['Name']]
+            print(f"Selected {len(final_products)} products from the best tile {best_tile_id}")
+        else:
+            final_products = products_containing_point
     else:
-        final_products = quarterly_products
+        # If no products contain the query point, try to find the closest tile
+        if quarterly_products:
+            # Get the tile ID from the first product
+            first_product = quarterly_products[0]
+            if 'Name' in first_product:
+                parts = first_product['Name'].split('_')
+                if len(parts) >= 5:
+                    best_tile_id = parts[4]  # Extract the tile ID part
+                    # Filter to only keep products from this tile
+                    final_products = [p for p in quarterly_products 
+                                    if 'Name' in p and best_tile_id in p['Name']]
+                    print(f"Selected {len(final_products)} products from the closest tile {best_tile_id}")
+                else:
+                    final_products = quarterly_products
+        else:
+            final_products = []
     
     print(f"\nSelected {len(final_products)} out of {len(quarterly_products)} quarterly products")
     

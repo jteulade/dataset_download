@@ -10,6 +10,13 @@ import argparse
 import json
 import os
 from datetime import datetime
+from pathlib import Path
+import sys
+
+# Add the project root directory to the Python path
+project_root = str(Path(__file__).parent.parent)
+sys.path.append(project_root)
+
 from src.map_visualizer import create_mosaic_map
 
 def process_quarterly_products(json_file):

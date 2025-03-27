@@ -12,6 +12,11 @@ import requests
 import zipfile
 import io
 import shutil
+from pathlib import Path
+
+# Add the project root directory to the Python path
+project_root = str(Path(__file__).parent.parent)
+sys.path.append(project_root)
 
 def download_natural_earth_land():
     """
@@ -20,7 +25,7 @@ def download_natural_earth_land():
     Returns:
         bool: True if download was successful, False otherwise
     """
-    # Get project root directory (parent of src)
+    # Get project root directory (parent of scripts)
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
     
