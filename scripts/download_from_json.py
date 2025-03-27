@@ -10,6 +10,12 @@ with year and tile ID.
 import os
 import sys
 import argparse
+from pathlib import Path
+
+# Add the project root directory to the Python path
+project_root = str(Path(__file__).parent.parent)
+sys.path.append(project_root)
+
 from src.sentinel_tile_downloader import SentinelDownloader
 from src.token_manager import get_access_token, ensure_valid_token
 
