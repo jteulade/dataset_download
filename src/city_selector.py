@@ -44,7 +44,6 @@ def post_process_city_selection(selected_cities, all_cities, min_distance_km=500
         DataFrame of post-processed selected cities
     """
     from math import radians, sin, cos, sqrt, atan2
-    import numpy as np
     
     def haversine_distance(lat1, lon1, lat2, lon2):
         # Earth radius in kilometers
@@ -102,11 +101,10 @@ def post_process_city_selection(selected_cities, all_cities, min_distance_km=500
             print(f"Iteration {iteration}: Found cities {improved_cities.loc[closest_pair[0]]['city']} and {improved_cities.loc[closest_pair[1]]['city']} only {min_dist:.1f} km apart")
             
             # Choose which city to replace (e.g., the less populous one)
-            city1_pop = float(improved_cities.loc[closest_pair[0]]['population'])
-            city2_pop = float(improved_cities.loc[closest_pair[1]]['population'])
+            city1_pop = improved_cities.loc[closest_pair[0]]['population']
+            city2_pop = improved_cities.loc[closest_pair[1]]['population']
             
             replace_idx = closest_pair[0] if city1_pop < city2_pop else closest_pair[1]
-            keep_idx = closest_pair[1] if replace_idx == closest_pair[0] else closest_pair[0]
             
             city_to_replace = improved_cities.loc[replace_idx]
             print(f"  Replacing {city_to_replace['city']} (pop: {city_to_replace['population']})")
@@ -154,7 +152,7 @@ def post_process_city_selection(selected_cities, all_cities, min_distance_km=500
     print(f"Post-processing complete after {iteration} iterations")
     return improved_cities
 
-def select_dispersed_cities(cities_df, n_cities=200, min_distance_km=500, apply_post_processing=True):
+def select_dispersed_cities(cities_df, n_cities=200, min_distance_km=500):
     """
     Select geographically dispersed cities using a greedy algorithm.
     
@@ -162,7 +160,6 @@ def select_dispersed_cities(cities_df, n_cities=200, min_distance_km=500, apply_
         cities_df (pandas.DataFrame): DataFrame containing city data
         n_cities (int): Number of cities to select
         min_distance_km (int): Minimum distance between cities in kilometers
-        apply_post_processing (bool): Whether to apply post-processing
         
     Returns:
         pandas.DataFrame: DataFrame containing selected cities
@@ -216,39 +213,9 @@ def select_dispersed_cities(cities_df, n_cities=200, min_distance_km=500, apply_
     # Get the selected cities
     selected_cities = valid_cities.iloc[selected_indices].reset_index(drop=True)
     
-    # Apply post-processing if requested
-    if apply_post_processing:
-        selected_cities = post_process_city_selection(
-            selected_cities, valid_cities, min_distance_km
-        )
+    # Always apply post-processing
+    selected_cities = post_process_city_selection(
+        selected_cities, valid_cities, min_distance_km
+    )
     
-    return selected_cities
-
-if __name__ == "__main__":
-    # Example usage
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="Select geographically dispersed cities from a CSV file")
-    parser.add_argument("--cities-csv", type=str, required=True,
-                        help="Path to the CSV file containing city data (e.g., worldcities.csv)")
-    parser.add_argument("--num-cities", type=int, default=20,
-                        help="Number of geographically dispersed cities to select")
-    parser.add_argument("--population-min", type=int, default=500000,
-                        help="Minimum population threshold for cities")
-    parser.add_argument("--output-csv", type=str, default="results/selected_cities.csv",
-                        help="Path to save the selected cities CSV file")
-    
-    args = parser.parse_args()
-    
-    # Load city data
-    cities_df = load_city_data(args.cities_csv, args.population_min)
-    
-    # Select dispersed cities
-    selected_cities = select_dispersed_cities(cities_df, args.num_cities)
-    print(f"Selected {len(selected_cities)} dispersed cities")
-    
-    # Save selected cities to CSV
-    import os
-    os.makedirs(os.path.dirname(args.output_csv), exist_ok=True)
-    selected_cities.to_csv(args.output_csv, index=False)
-    print(f"Selected cities saved to {args.output_csv}") 
+    return selected_cities 

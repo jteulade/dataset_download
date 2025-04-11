@@ -460,23 +460,3 @@ def create_mosaic_map(cities_results, output_file='maps/city_mosaics_map.html'):
     print(f"Interactive map saved to {output_file}")
     
     return output_file
-
-if __name__ == "__main__":
-    # Example usage
-    import argparse
-    import json
-    
-    parser = argparse.ArgumentParser(description="Create interactive maps for Sentinel-2 data")
-    parser.add_argument("--input-json", type=str, required=True,
-                        help="Path to the JSON file containing query results")
-    parser.add_argument("--output-map", type=str, default="maps/interactive_map.html",
-                        help="Path to save the HTML map file")
-    
-    args = parser.parse_args()
-    
-    # Load the input JSON file
-    with open(args.input_json, 'r') as f:
-        data = json.load(f)
-    
-    # Create the map
-    create_mosaic_map(data, args.output_map) 
