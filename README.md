@@ -60,11 +60,13 @@ python scripts/sentinel_city_explorer.py --cities-csv worldcities.csv --num-citi
 - `--cities-csv`: Path to the CSV file containing city data (required)
 - `--num-cities`: Number of cities to select (default: 20)
 - `--population-min`: Minimum population threshold for cities (default: 500000)
+- `--output-dir`: Directory to save output files (default: "results")
 - `--year-filter`: Year to filter for (default: "2023")
-- `--random-distance`: Distance in kilometers for random points from cities (default: 100)
-- `--ensure-on-land`: Only generate random points on land (default: False)
-- `--max-land-attempts`: Maximum attempts to find a random point on land (default: 50)
-- `--download-land-data`: Download land polygon data before starting (default: False)
+- `--random-distance`: Distance in kilometers for random points from cities (default: 300)
+- `--ensure-on-land`: Only generate random points on land (default: True)
+- `--max-land-attempts`: Maximum attempts to find a random point on land (default: 10)
+- `--min-city-distance`: Minimum distance between cities in kilometers (default: 500)
+- `--random-seed`: Random seed for reproducible results (default: None)
 
 #### Output
 
