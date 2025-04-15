@@ -83,7 +83,7 @@ python scripts/sentinel_city_explorer.py --cities-csv worldcities.csv --num-citi
 - `--num-cities`: Number of cities to select (default: 20)
 - `--population-min`: Minimum population threshold for cities (default: 500000)
 - `--output-dir`: Directory to save output files (default: "results")
-- `--year-filter`: Year to filter for (default: "2023")
+- `--year-filter`: Year to filter for (default: "2023", min 2015)
 - `--random-distance`: Distance in kilometers for random points from cities (default: 300)
 - `--ensure-on-land`: Only generate random points on land (default: True)
 - `--max-land-attempts`: Maximum attempts to find a random point on land (default: 10)

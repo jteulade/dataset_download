@@ -8,13 +8,14 @@ Copernicus Data Space API.
 import os
 import json
 import getpass
+import logging as log
 import requests
 
 # Global constants
 TOKEN_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
 DEFAULT_TOKEN_FILE = 'copernicus_dataspace_token.json'
 
-def get_token_path(token_file=None):
+def get_token_patprinth(token_file=None):
     """Get the path to the token file."""
     if token_file is None:
         return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), DEFAULT_TOKEN_FILE)
@@ -28,7 +29,7 @@ def load_token(token_file=None):
             with open(token_path, 'r') as f:
                 return json.load(f)
     except (json.JSONDecodeError, IOError) as e:
-        print(f"Error loading token from {token_path}: {e}")
+        log.error(f"Error loading token from {token_path}: {e}")
     return None
 
 def save_token(token_data, token_file=None):
@@ -39,7 +40,7 @@ def save_token(token_data, token_file=None):
             json.dump(token_data, f)
         return True
     except IOError as e:
-        print(f"Error saving token to {token_path}: {e}")
+        log.error(f"Error saving token to {token_path}: {e}")
         return False
 
 def get_credentials():
@@ -58,7 +59,7 @@ def generate_token(token_file=None):
     """Generate a new token using credentials."""
     username, password = get_credentials()
     if not username or not password:
-        print("No credentials provided. Token generation canceled.")
+        log.warning("No credentials provided. Token generation canceled.")
         return None
     
     try:
@@ -75,15 +76,15 @@ def generate_token(token_file=None):
         if response.status_code == 200:
             token_data = response.json()
             if save_token(token_data, token_file):
-                print(f"Token generated successfully and saved to {get_token_path(token_file)}")
-                print(f"Token will expire in {token_data.get('expires_in', 'unknown')} seconds")
+                log.info(f"Token generated successfully and saved to {get_token_path(token_file)}")
+                log.warning(f"Token will expire in {token_data.get('expires_in', 'unknown')} seconds")
             return token_data
         else:
-            print(f"Failed to generate token: {response.status_code} {response.reason}")
+            log.error(f"Failed to generate token: {response.status_code} {response.reason}")
             if response.text:
-                print(f"Response: {response.text}")
+                log.error(f"Response: {response.text}")
     except Exception as e:
-        print(f"Error generating token: {e}")
+        log.error(f"Error generating token: {e}")
     return None
 
 def refresh_token(token_data=None, token_file=None):
@@ -107,24 +108,24 @@ def refresh_token(token_data=None, token_file=None):
         if response.status_code == 200:
             new_token_data = response.json()
             if save_token(new_token_data, token_file):
-                print("Token refreshed successfully")
-                print(f"New token will expire in {new_token_data.get('expires_in', 'unknown')} seconds")
+                log.info("Token refreshed successfully")
+                log.warning(f"New token will expire in {new_token_data.get('expires_in', 'unknown')} seconds")
             return new_token_data
         else:
-            print(f"Failed to refresh token: {response.status_code} {response.reason}")
+            log.warning(f"Failed to refresh token: {response.status_code} {response.reason}")
             return generate_token(token_file)
     except Exception as e:
-        print(f"Error refreshing token: {e}")
+        log.error(f"Error refreshing token: {e}")
         return generate_token(token_file)
 
 def ensure_valid_token(token_file=None):
     """Ensure a valid token is available, generating or refreshing if needed."""
     token_data = load_token(token_file)
     if token_data is None:
-        print("No token found. Generating a new token...")
+        log.warning("No token found. Generating a new token...")
         return generate_token(token_file)
     else:
-        print("Refreshing token...")
+        log.warning("Refreshing token...")
         return refresh_token(token_data, token_file)
 
 def get_access_token(token_file=None):

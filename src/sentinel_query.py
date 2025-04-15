@@ -6,24 +6,32 @@ This module provides functions for querying Sentinel-2 Global Mosaics data from 
 
 import os
 import json
+import logging
 import requests
+import sys
 from datetime import datetime, timedelta
 import math
 import random
 import numpy as np
-from shapely.geometry import Point
-from shapely.geometry.polygon import Polygon
-import geopandas as gpd
+from shapely.geometry import Point # type: ignore
+from shapely.geometry.polygon import Polygon # type: ignore
+import geopandas as gpd # type: ignore
 import warnings
 from src.token_manager import ensure_valid_token, get_access_token
 
 # Global variable to store the land polygons once loaded
 _LAND_POLYGONS = None
 
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 # Create data directory path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 data_dir = os.path.join(project_root, 'data')
 os.makedirs(data_dir, exist_ok=True)
+import sys
 
 def make_sentinel_request(url, headers, params, max_retries=2):
     """
@@ -42,7 +50,7 @@ def make_sentinel_request(url, headers, params, max_retries=2):
         response = requests.get(url, headers=headers, params=params)
         
         if response.status_code in [401, 403] and retry < max_retries:
-            print(f"Authentication error ({response.status_code}). Refreshing token...")
+            logging.info(f"Authentication error ({response.status_code}). Refreshing token...")
             new_access_token = get_access_token()
             if new_access_token:
                 headers = {'Authorization': f'Bearer {new_access_token}'}
@@ -64,24 +72,31 @@ def process_product(product, quarter, query_point):
         tuple: (product_entry, contains_point) where product_entry is the processed product
                and contains_point is a boolean indicating if the product contains the query point
     """
-    product_entry = dict(product)
-    product_entry["quarter"] = quarter
-    
-    if 'GeoFootprint' in product and 'coordinates' in product['GeoFootprint']:
-        try:
-            if product['GeoFootprint']['type'] == 'Polygon':
-                coords = product['GeoFootprint']['coordinates'][0]
-                tile_polygon = Polygon(coords)
-                # Point takes (x, y) which is (lon, lat)
-                query_point_obj = Point(query_point[0], query_point[1])
-                
-                if tile_polygon.contains(query_point_obj):
-                    product_entry["contains_query_point"] = True
-                    return product_entry, True
-        except Exception as e:
-            print(f"Error checking if point is in tile: {e}")
-    
-    return product_entry, False
+    try:
+        product_entry = dict(product)
+        product_entry["quarter"] = quarter
+        
+        if 'GeoFootprint' in product and 'coordinates' in product['GeoFootprint']:
+            try:
+                if product['GeoFootprint']['type'] == 'Polygon':
+                    coords = product['GeoFootprint']['coordinates'][0]
+                    tile_polygon = Polygon(coords)
+                    # Point takes (x, y) which is (lon, lat)
+                    query_point_obj = Point(query_point[0], query_point[1])
+                    
+                    if tile_polygon.contains(query_point_obj):
+                        product_entry["contains_query_point"] = True
+                        return product_entry, True
+            except Exception as e:
+                logging.error(f"Error checking if point is in tile: {e}")
+        
+        return product_entry, False
+    except KeyError as e:
+        logging.error(f"KeyError while processing product: {e}")
+        return None, False
+    except Exception as e:
+        logging.error(f"Unexpected error while processing product: {e}")
+        return None, False
 
 def select_best_products(products_containing_point, quarterly_products):
     """
@@ -95,7 +110,7 @@ def select_best_products(products_containing_point, quarterly_products):
         list: The selected products
     """
     if products_containing_point:
-        print(f"Found {len(products_containing_point)} products that contain the query point.")
+        logging.info(f"Found {len(products_containing_point)} products that contain the query point.")
         best_tile_id = None
         for product in products_containing_point:
             if 'Name' in product:
@@ -107,7 +122,7 @@ def select_best_products(products_containing_point, quarterly_products):
         if best_tile_id:
             final_products = [p for p in products_containing_point 
                             if 'Name' in p and best_tile_id in p['Name']]
-            print(f"Selected {len(final_products)} products from the best tile {best_tile_id}")
+            logging.info(f"Selected {len(final_products)} products from the best tile {best_tile_id}")
         else:
             final_products = products_containing_point
     else:
@@ -122,7 +137,7 @@ def select_best_products(products_containing_point, quarterly_products):
                     # Filter to only keep products from this tile
                     final_products = [p for p in quarterly_products 
                                     if 'Name' in p and best_tile_id in p['Name']]
-                    print(f"Selected {len(final_products)} products from the closest tile {best_tile_id}")
+                    logging.info(f"Selected {len(final_products)} products from the closest tile {best_tile_id}")
                 else:
                     final_products = quarterly_products
         else:
@@ -151,7 +166,7 @@ def query_sentinel2_by_coordinates(lat, lon, year="2023", output_dir="results",
     """
     access_token = get_access_token()
     if not access_token:
-        print("Failed to obtain a valid access token")
+        logging.warning("Failed to obtain a valid access token")
         return None
         
     headers = {'Authorization': f'Bearer {access_token}'}
@@ -181,16 +196,15 @@ def query_sentinel2_by_coordinates(lat, lon, year="2023", output_dir="results",
         }
 
         response = make_sentinel_request(url, headers, params)
-        print(f"\n{year} {quarter}:")
-        print(f"Status code: {response.status_code}")
+        logging.info(f"\n{year} {quarter}:")
+        logging.info(f"Status code: {response.status_code}")
         
-        if response.status_code == 200:
-            result = response.json()
-            for product in result.get('value', []):
-                product_entry, contains_point = process_product(product, quarter, (lon, lat))
-                if contains_point:
-                    products_containing_point.append(product_entry)
-                quarterly_products.append(product_entry)
+        result = handle_api_error(response, year, quarter)
+        for product in result.get('value', []):
+            product_entry, contains_point = process_product(product, quarter, (lon, lat))
+            if contains_point:
+                products_containing_point.append(product_entry)
+       
     
     # Select the best products, passing both city coordinates and query point
     city_coords = (city_lat, city_lon) if all(x is not None for x in [city_lat, city_lon]) else None
@@ -201,14 +215,14 @@ def query_sentinel2_by_coordinates(lat, lon, year="2023", output_dir="results",
     if len(final_products) != 4:
         found_quarters = set(p.get('quarter') for p in final_products)
         missing_quarters = set(quarters) - found_quarters
-        print(f"Warning: Found {len(final_products)} products instead of expected 4.")
-        print(f"Missing quarters: {missing_quarters}")
-        print(f"Found quarters: {found_quarters}")
+        logging.warning(f"\033[31mWarning: Found {len(final_products)} products instead of expected 4.\033[0m")
+        logging.warning(f"Missing quarters: {missing_quarters}")
+        logging.warning(f"Found quarters: {found_quarters}")
         return None
     
     # Sort products by quarter
     final_products.sort(key=lambda x: x.get('quarter'))
-    print(f"\nSelected {len(final_products)} out of {len(quarterly_products)} quarterly products")
+    logging.info(f"\nSelected {len(final_products)} out of {len(quarterly_products)} quarterly products")
     
     # Create the result structure
     area = {
@@ -238,6 +252,24 @@ def query_sentinel2_by_coordinates(lat, lon, year="2023", output_dir="results",
     
     return result
 
+def handle_api_error(response, year, quarter):
+    """
+    Handle API errors and stop execution if necessary.
+    
+    Args:
+        response (requests.Response): The API response object.
+        year (str): The year of the query.
+        quarter (str): The quarter of the query.
+    """
+    if response.status_code != 200:
+        logging.error(f"\033[31mError: Failed to fetch data for {year} {quarter}. Status code: {response.status_code}\033[0m")
+        sys.exit(1)
+    result = response.json()
+    if not result.get('value', []):
+        logging.error(f"\033[31mError: No products found for {year} {quarter}. Stopping execution.\033[0m")
+        sys.exit(1)
+    return result
+
 def is_point_on_land(lat, lon, debug=False):
     """
     Check if a geographic point is on land or in water.
@@ -258,11 +290,20 @@ def is_point_on_land(lat, lon, debug=False):
         try:
             ne_file = os.path.join(data_dir, 'ne_110m_land.shp')
             if os.path.exists(ne_file):
-                print(f"Loading land polygons from {ne_file}")
+                logging.info(f"Loading land polygons from {ne_file}")
                 _LAND_POLYGONS = gpd.read_file(ne_file)
             else:
                 warnings.warn("Land polygon file not found. Cannot determine if point is on land.")
                 return False
+        except ImportError:
+            warnings.warn("Geopandas not installed. Cannot determine if point is on land.")
+            return False
+        except FileNotFoundError:
+            warnings.warn("Land polygon file not found. Cannot determine if point is on land.")
+            return False
+        except ValueError:
+            warnings.warn("Error parsing land polygon file. Cannot determine if point is on land.")
+            return False
         except Exception as e:
             warnings.warn(f"Error loading land polygons: {e}. Cannot determine if point is on land.")
             return False
@@ -325,4 +366,4 @@ def _generate_random_point_at_distance(lat, lon, distance_km):
         math.cos(distance_rad) - math.sin(lat_rad) * math.sin(new_lat_rad)
     )
     
-    return math.degrees(new_lat_rad), math.degrees(new_lon_rad) 
+    return math.degrees(new_lat_rad), math.degrees(new_lon_rad)

@@ -15,7 +15,9 @@ from pathlib import Path
 import random
 import numpy as np
 import logging as log
-from shapely.geometry import Polygon, Point
+from shapely.geometry import Polygon, Point # type: ignore
+
+log.basicConfig(level=log.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Add the project root directory to the Python path
 project_root = str(Path(__file__).parent.parent)
@@ -144,6 +146,10 @@ def process_city(city, args, unified_result):
     """Process a single city and its random point"""
     lat, lon = city['lat'], city['lng']
     city_name = city['city']
+
+    # Initialize city_polygon to None
+    city_polygon = None
+
     
     # Query for the city center
     log.info(f"\nCity: {city_name} ({lat}, {lon})")
@@ -169,13 +175,14 @@ def process_city(city, args, unified_result):
         city_tile_id, coords, city_footprint_found = get_city_tile_info(result)
         
         # Create city polygon if footprint found
-        city_polygon = None
         if city_footprint_found and coords:
             city_polygon = Polygon(coords)
+        
+       
     
     # Generate random point
     log.info(f"\nGenerating random point {args.random_distance} km away from {city_name}...")
-    random_point_result = generate_random_point(lat, lon, args, city_polygon)
+    random_point_result = generate_random_point(lat, lon, args, city_polygon if city_polygon else None)
     
     # Skip if no random point found
     if random_point_result is None:
@@ -233,6 +240,47 @@ def main():
     # Parse arguments
     args = parse_arguments()
     
+    # Validate arguments
+    if not os.path.isfile(args.cities_csv):
+        log.error(f"Cities CSV file not found: {args.cities_csv}")
+        sys.exit(1)
+
+    if args.num_cities <= 0:
+        log.error("Number of cities (--num-cities) must be greater than 0.")
+        sys.exit(1)
+
+    if args.population_min < 0:
+        log.error("Minimum population (--population-min) cannot be negative.")
+        sys.exit(1)
+
+    if args.random_distance <= 0:
+        log.error("Random distance (--random-distance) must be greater than 0.")
+        sys.exit(1)
+
+    if args.max_land_attempts <= 0:
+        log.error("Maximum land attempts (--max-land-attempts) must be greater than 0.")
+        sys.exit(1)
+
+    if args.min_city_distance <= 0:
+        log.error("Minimum city distance (--min-city-distance) must be greater than 0.")
+        sys.exit(1)
+
+    if not os.path.exists(args.output_dir):
+        try:
+            os.makedirs(args.output_dir)
+            log.info(f"Created output directory: {args.output_dir}")
+        except Exception as e:
+            log.error(f"Failed to create output directory: {args.output_dir}. Error: {e}")
+            sys.exit(1)
+
+    if not args.year_filter.isdigit() or len(args.year_filter) != 4:
+        log.error("Year filter (--year-filter) must be a valid 4-digit year (e.g., '2023').")
+        sys.exit(1)
+
+    if args.random_seed is not None and args.random_seed < 0:
+        log.error("Random seed (--random-seed) must be a non-negative integer.")
+        sys.exit(1)
+
     # Set up random seed
     random_seed = setup_random_seed(args.random_seed)
     

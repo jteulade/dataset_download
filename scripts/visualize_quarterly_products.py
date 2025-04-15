@@ -14,6 +14,8 @@ from datetime import datetime
 from pathlib import Path
 import sys
 
+log.basicConfig(level=log.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 # Add the project root directory to the Python path
 project_root = str(Path(__file__).parent.parent)
 sys.path.append(project_root)
@@ -61,7 +63,7 @@ def process_quarterly_products(json_file):
             # Add the feature to the result
             result['features'].append(feature)
         
-        # Add the result to the list
+        # Add the result to the listlog.info(f"Processing quarterly products from {args.input_json}")
         results.append(result)
     
     return results

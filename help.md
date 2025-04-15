@@ -1,4 +1,1 @@
-Gerer les exceptions et les log
-
-Faire un script qui permettrait delancer tous les cripts en une fois pour faciliter le travail de l'user
-
+Pour la gestion du filtre des annees, si lorsqu'on envoie la requete et que nous ne recevons pas tous les quarters alors l'execution s'arrete.

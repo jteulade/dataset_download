@@ -6,6 +6,7 @@ dispersed cities using a greedy algorithm.
 """
 
 import pandas as pd
+import logging as log
 import numpy as np
 from sklearn.metrics.pairwise import haversine_distances
 
@@ -20,15 +21,15 @@ def load_city_data(csv_file, population_min=0):
     Returns:
         pandas.DataFrame: DataFrame containing filtered city data
     """
-    print(f"Loading city data from {csv_file}")
+    log.info(f"Loading city data from {csv_file}")
     cities_df = pd.read_csv(csv_file)
     
     # Filter by population if specified
     if population_min > 0:
-        print(f"Filtering cities with population >= {population_min}")
+        log.info(f"Filtering cities with population >= {population_min}")
         cities_df = cities_df[cities_df['population'] >= population_min]
     
-    print(f"Loaded {len(cities_df)} cities")
+    log.info(f"Loaded {len(cities_df)} cities")
     return cities_df
 
 def post_process_city_selection(selected_cities, all_cities, min_distance_km=500):
@@ -71,7 +72,7 @@ def post_process_city_selection(selected_cities, all_cities, min_distance_km=500
     improvements_made = True
     iteration = 0
     
-    print(f"Starting post-processing to ensure minimum distance of {min_distance_km} km between cities")
+    log.info(f"Starting post-processing to ensure minimum distance of {min_distance_km} km between cities")
     
     while improvements_made:
         iteration += 1
@@ -98,7 +99,7 @@ def post_process_city_selection(selected_cities, all_cities, min_distance_km=500
         
         # If closest pair is too close, replace one of them
         if min_dist < min_distance_km and closest_pair is not None:
-            print(f"Iteration {iteration}: Found cities {improved_cities.loc[closest_pair[0]]['city']} and {improved_cities.loc[closest_pair[1]]['city']} only {min_dist:.1f} km apart")
+            log.info(f"Iteration {iteration}: Found cities {improved_cities.loc[closest_pair[0]]['city']} and {improved_cities.loc[closest_pair[1]]['city']} only {min_dist:.1f} km apart")
             
             # Choose which city to replace (e.g., the less populous one)
             city1_pop = improved_cities.loc[closest_pair[0]]['population']
@@ -107,7 +108,7 @@ def post_process_city_selection(selected_cities, all_cities, min_distance_km=500
             replace_idx = closest_pair[0] if city1_pop < city2_pop else closest_pair[1]
             
             city_to_replace = improved_cities.loc[replace_idx]
-            print(f"  Replacing {city_to_replace['city']} (pop: {city_to_replace['population']})")
+            log.info(f"  Replacing {city_to_replace['city']} (pop: {city_to_replace['population']})")
             
             # Find the best replacement
             best_replacement = None
@@ -138,18 +139,18 @@ def post_process_city_selection(selected_cities, all_cities, min_distance_km=500
             
             # If we found a better replacement, use it
             if best_replacement is not None and max_min_distance > min_dist:
-                print(f"  Replaced with {best_replacement['city']} (min distance: {max_min_distance:.1f} km)")
+                log.info(f"  Replaced with {best_replacement['city']} (min distance: {max_min_distance:.1f} km)")
                 improved_cities.loc[replace_idx] = best_replacement
                 selected_indices.remove(replace_idx)
                 selected_indices.add(best_replacement_idx)
                 improvements_made = True
             else:
-                print(f"  Could not find a better replacement, keeping original city")
+                log.warning(f"  Could not find a better replacement, keeping original city")
         else:
-            print(f"Iteration {iteration}: All cities are at least {min_distance_km} km apart (closest: {min_dist:.1f} km)")
+            log.warning(f"Iteration {iteration}: All cities are at least {min_distance_km} km apart (closest: {min_dist:.1f} km)")
             break
     
-    print(f"Post-processing complete after {iteration} iterations")
+    log.info(f"Post-processing complete after {iteration} iterations")
     return improved_cities
 
 def select_dispersed_cities(cities_df, n_cities=200, min_distance_km=500):
@@ -164,7 +165,7 @@ def select_dispersed_cities(cities_df, n_cities=200, min_distance_km=500):
     Returns:
         pandas.DataFrame: DataFrame containing selected cities
     """
-    print(f"Selecting {n_cities} geographically dispersed cities")
+    log.info(f"Selecting {n_cities} geographically dispersed cities")
     
     # Ensure we have latitude and longitude columns
     if 'lat' not in cities_df.columns or 'lng' not in cities_df.columns:
@@ -172,10 +173,10 @@ def select_dispersed_cities(cities_df, n_cities=200, min_distance_km=500):
     
     # Filter out cities with missing coordinates
     valid_cities = cities_df.dropna(subset=['lat', 'lng']).copy()
-    print(f"Found {len(valid_cities)} cities with valid coordinates")
+    log.info(f"Found {len(valid_cities)} cities with valid coordinates")
     
     if len(valid_cities) < n_cities:
-        print(f"Warning: Only {len(valid_cities)} cities available, less than requested {n_cities}")
+        log.warning(f"Warning: Only {len(valid_cities)} cities available, less than requested {n_cities}")
         n_cities = len(valid_cities)
     
     # Convert coordinates to radians for haversine distance calculation

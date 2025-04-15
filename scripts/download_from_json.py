@@ -13,6 +13,9 @@ import argparse
 import logging as log
 from pathlib import Path
 
+log.basicConfig(level=log.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
 # Add the project root directory to the Python path
 project_root = str(Path(__file__).parent.parent)
 sys.path.append(project_root)
