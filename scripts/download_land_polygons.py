@@ -48,7 +48,7 @@ def download_natural_earth_land(output_dir):
         
         # Extract the zip file
         with zipfile.ZipFile(io.BytesIO(response.content)) as z:
-            z.extractall(out)
+            z.extractall(output_dir)
         
         # Check if the shapefile exists
         shapefile = os.path.join(output_dir, 'ne_110m_land.shp')
