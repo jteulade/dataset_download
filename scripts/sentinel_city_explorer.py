@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 import random
 import numpy as np
+import logging as log
 from shapely.geometry import Polygon, Point
 
 # Add the project root directory to the Python path
@@ -29,13 +30,13 @@ def setup_random_seed(seed=None):
     if seed is not None:
         random.seed(seed)
         np.random.seed(seed)
-        print(f"Set random seed to {seed}")
+        log.info(f"Set random seed to {seed}")
     else:
         # If no seed provided, generate one and use it
         random_seed = random.randint(0, 2**32 - 1)
         random.seed(random_seed)
         np.random.seed(random_seed)
-        print(f"Using generated random seed: {random_seed}")
+        log.info(f"Using generated random seed: {random_seed}")
         return random_seed
     return seed
 
@@ -125,12 +126,12 @@ def generate_random_point(lat, lon, args, city_polygon=None):
             # Check if this point is outside the city tile footprint
             if not city_polygon.contains(Point(random_lon, random_lat)):
                 found_valid_point = True
-                print(f"Found valid random point outside the city tile after {attempt+1} attempts")
+                log.info(f"Found valid random point outside the city tile after {attempt+1} attempts")
                 return random_point_result
         
         if not found_valid_point:
-            print(f"Could not find a random point outside the city tile after {max_attempts} attempts.")
-            print(f"Falling back to standard random point generation.")
+            log.warning(f"Could not find a random point outside the city tile after {max_attempts} attempts.")
+            log.warning(f"Falling back to standard random point generation.")
     
     # Standard random point generation
     return get_random_point_at_distance(
@@ -145,7 +146,7 @@ def process_city(city, args, unified_result):
     city_name = city['city']
     
     # Query for the city center
-    print(f"\nCity: {city_name} ({lat}, {lon})")
+    log.info(f"\nCity: {city_name} ({lat}, {lon})")
     result = query_sentinel2_by_coordinates(
         lat=lat,
         lon=lon,
@@ -173,12 +174,12 @@ def process_city(city, args, unified_result):
             city_polygon = Polygon(coords)
     
     # Generate random point
-    print(f"\nGenerating random point {args.random_distance} km away from {city_name}...")
+    log.info(f"\nGenerating random point {args.random_distance} km away from {city_name}...")
     random_point_result = generate_random_point(lat, lon, args, city_polygon)
     
     # Skip if no random point found
     if random_point_result is None:
-        print(f"Could not find a point on land after {args.max_land_attempts} attempts. Skipping random point for {city_name}.")
+        log.warning (f"Could not find a point on land after {args.max_land_attempts} attempts. Skipping random point for {city_name}.")
         return 0, 0, 1  # on_land, in_water, skipped
     
     random_lat, random_lon, is_on_land = random_point_result
@@ -193,7 +194,7 @@ def process_city(city, args, unified_result):
         on_land = 0
         in_water = 1
         
-    print(f"Random point {args.random_distance} km away: ({random_lat}, {random_lon}) - {land_status}")
+    log.info(f"Random point {args.random_distance} km away: ({random_lat}, {random_lon}) - {land_status}")
     
     # Query Sentinel-2 data for the random point
     neighborhood_size = 0.05 if city_tile_id else None
@@ -216,6 +217,15 @@ def process_city(city, args, unified_result):
     
     return on_land, in_water, 0  # on_land, in_water, skipped
 
+
+
+def save_results(unified_result, output_dir, year_filter):
+    """Save the unified result to a JSON file."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    unified_file = os.path.join(output_dir, f"S2_GlobalMosaics_{year_filter}_unified_{timestamp}.json")
+    with open(unified_file, 'w') as f:
+        json.dump(unified_result, f, indent=2)
+    return unified_file
 def main():
     # Parse arguments
     args = parse_arguments()
@@ -224,28 +234,28 @@ def main():
     random_seed = setup_random_seed(args.random_seed)
     
     # Refresh token
-    print("Refreshing token before starting")
+    log.info("Refreshing token before starting")
     refreshed = get_access_token()
     if refreshed:
-        print("Token refreshed successfully")
+        log.info("Token refreshed successfully")
     else:
-        print("Failed to refresh token. Will try to generate a new one when needed.")
+        log.warning("Failed to refresh token. Will try to generate a new one when needed.")
     
     # Load and select cities
-    print("\n=== Step 1: Loading and selecting cities ===")
+    log.info("\n=== Step 1: Loading and selecting cities ===")
     cities_df = load_city_data(args.cities_csv, args.population_min)
     selected_cities = select_dispersed_cities(
         cities_df, 
         args.num_cities,
         min_distance_km=args.min_city_distance
     )
-    print(f"Selected {len(selected_cities)} dispersed cities")
+    log.info(f"Selected {len(selected_cities)} dispersed cities")
     
     # Save selected cities to CSV
     os.makedirs(args.output_dir, exist_ok=True)
     selected_cities_file = os.path.join(args.output_dir, "selected_cities.csv")
     selected_cities.to_csv(selected_cities_file, index=False)
-    print(f"Selected cities saved to {selected_cities_file}")
+    log.info(f"Selected cities saved to {selected_cities_file}")
     
     # Initialize result structure
     unified_result = {
@@ -270,7 +280,7 @@ def main():
     }
     
     # Process each city
-    print("\n=== Step 2: Querying Sentinel-2 Global Mosaics data for each city ===")
+    log.info("\n=== Step 2: Querying Sentinel-2 Global Mosaics data for each city ===")
     random_points_on_land = 0
     random_points_in_water = 0
     skipped_random_points = 0
@@ -282,13 +292,10 @@ def main():
         skipped_random_points += skipped
     
     # Save results
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    unified_file = os.path.join(args.output_dir, f"S2_GlobalMosaics_{args.year_filter}_unified_{timestamp}.json")
-    with open(unified_file, 'w') as f:
-        json.dump(unified_result, f, indent=2)
+    unified_file = save_results(unified_result, args.output_dir, args.year_filter)
     
     # Print summary
-    print(f"\nSaved unified JSON with {unified_result['properties']['totalAreas']} areas and {unified_result['properties']['totalProducts']} products to {unified_file}")
+    log.info(f"\nSaved unified JSON with {unified_result['properties']['totalAreas']} areas and {unified_result['properties']['totalProducts']} products to {unified_file}")
     
     total_random_points_attempted = random_points_on_land + random_points_in_water + skipped_random_points
     total_random_points_generated = random_points_on_land + random_points_in_water
@@ -298,20 +305,20 @@ def main():
     water_percent = (random_points_in_water / total_random_points_generated * 100) if total_random_points_generated > 0 else 0
     skipped_percent = (skipped_random_points / total_random_points_attempted * 100) if total_random_points_attempted > 0 else 0
     
-    print(f"\n=== Summary ===")
-    print(f"- Selected {len(selected_cities)} dispersed cities")
-    print(f"- Total Sentinel-2 Global Mosaic areas: {unified_result['properties']['totalAreas']}")
-    print(f"- Total Sentinel-2 Global Mosaic products: {unified_result['properties']['totalProducts']}")
-    print(f"- Random points on land: {random_points_on_land} ({land_percent:.1f}% of generated points)")
-    print(f"- Random points in water: {random_points_in_water} ({water_percent:.1f}% of generated points)")
-    print(f"- Random points skipped: {skipped_random_points} ({skipped_percent:.1f}% of attempted points)")
-    print(f"- Unified JSON saved to {unified_file}")
+    log.info(f"\n=== Summary ===")
+    log.info(f"- Selected {len(selected_cities)} dispersed cities")
+    log.info(f"- Total Sentinel-2 Global Mosaic areas: {unified_result['properties']['totalAreas']}")
+    log.info(f"- Total Sentinel-2 Global Mosaic products: {unified_result['properties']['totalProducts']}")
+    log.info(f"- Random points on land: {random_points_on_land} ({land_percent:.1f}% of generated points)")
+    log.info(f"- Random points in water: {random_points_in_water} ({water_percent:.1f}% of generated points)")
+    log.info(f"- Random points skipped: {skipped_random_points} ({skipped_percent:.1f}% of attempted points)")
+    log.info(f"- Unified JSON saved to {unified_file}")
     
-    print("\n=== Process Complete ===")
-    print(f"You can now use the download_from_json.py script to download the tiles:")
-    print(f"python scripts/download_from_json.py --json-file {unified_file} --output-dir downloads")
-    print(f"\nTo visualize the results, use visualize_quarterly_products.py:")
-    print(f"python scripts/visualize_quarterly_products.py --input-json {unified_file}")
-
+    log.info("\n=== Process Complete ===")
+    log.info(f"You can now use the download_from_json.py script to download the tiles:")
+    log.info(f"python scripts/download_from_json.py --json-file {unified_file} --output-dir downloads")
+    log.info(f"\nTo visualize the results, use visualize_quarterly_products.py:")
+    log.info(f"python scripts/visualize_quarterly_products.py --input-json {unified_file}")
+    
 if __name__ == "__main__":
     main() 
