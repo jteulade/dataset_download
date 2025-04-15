@@ -61,6 +61,10 @@ This script downloads Natural Earth land polygons at 1:110m scale, which are use
 python scripts/download_land_polygons.py
 ```
 
+#### Key Arguments
+
+- `--output-dir`: Directory to save output files (default: "data")
+
 The script will download the land polygons to the `data` directory in your project root.
 
 ### 2. City Explorer (`scripts/sentinel_city_explorer.py`)
