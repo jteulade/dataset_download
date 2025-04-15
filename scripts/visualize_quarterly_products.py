@@ -8,6 +8,7 @@ quarterly products and their footprints.
 
 import argparse
 import json
+import logging as log
 import os
 from datetime import datetime
 from pathlib import Path
@@ -75,14 +76,14 @@ def main():
     args = parser.parse_args()
     
     # Process the quarterly products
-    print(f"Processing quarterly products from {args.input_json}")
+    log.info(f"Processing quarterly products from {args.input_json}")
     results = process_quarterly_products(args.input_json)
     
     # Create the interactive map
-    print(f"Creating interactive map with {len(results)} areas")
+    log.info(f"Creating interactive map with {len(results)} areas")
     create_mosaic_map(results, args.output_map)
     
-    print(f"\nMap saved to {args.output_map}")
+    log.info(f"\nMap saved to {args.output_map}")
 
 if __name__ == "__main__":
     main() 

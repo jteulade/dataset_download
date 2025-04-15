@@ -226,6 +226,9 @@ def save_results(unified_result, output_dir, year_filter):
     with open(unified_file, 'w') as f:
         json.dump(unified_result, f, indent=2)
     return unified_file
+
+
+
 def main():
     # Parse arguments
     args = parse_arguments()

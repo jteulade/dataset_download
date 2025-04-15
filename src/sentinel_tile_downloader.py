@@ -359,7 +359,7 @@ class SentinelDownloader:
                 else:
                     logger.warning("Token refresh failed, download may fail")
             except Exception as e:
-                logger.warning(f"Error refreshing token: {e}")
+                logger.error(f"Error refreshing token: {e}")
         else:
             logger.info("Token is valid, proceeding with download")
         

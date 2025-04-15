@@ -125,6 +125,9 @@ python scripts/visualize_quarterly_products.py --input-json results/your_generat
 - `--input-json`: Path to the JSON file containing quarterly products (required)
 - `--output-map`: Path to save the HTML map file (default: "maps/quarterly_products_map.html")
 
+This an example of the map you can have with 5 cities : 
+
+![example](./ressources/example_map.png)
 ## Example Workflow
 
 1. Download land polygons (if not already downloaded):
