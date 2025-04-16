@@ -28,7 +28,14 @@ from src.sentinel_query import query_sentinel2_by_coordinates, get_random_point_
 from src.token_manager import get_access_token
 
 def setup_random_seed(seed=None):
-    """Set up random seed for reproducibility"""
+    """Set up random seed for reproducibility
+    
+    Parameters:
+        seed (int): Random seed value. If None, a random seed will be generated.
+   
+    Returns:
+        int: The random seed used.
+    """
     if seed is not None:
         random.seed(seed)
         np.random.seed(seed)
@@ -43,7 +50,11 @@ def setup_random_seed(seed=None):
     return seed
 
 def parse_arguments():
-    """Parse command line arguments"""
+    """Parse command line arguments
+    
+    Returns:
+        argparse.Namespace: Parsed arguments
+    """
     parser = argparse.ArgumentParser(description="Query Sentinel-2 Global Mosaics data for dispersed cities")
     parser.add_argument("--cities-csv", type=str, default="worldcities.csv",
                         help="Path to the CSV file containing city data (e.g., worldcities.csv)")
@@ -69,10 +80,18 @@ def parse_arguments():
     return parser.parse_args()
 
 def get_city_tile_info(result):
-    """Extract tile ID and footprint information from query result"""
+    """Extract tile ID, coordinates and footprint information from query result
+    
+    Parameters:
+        result (dict): The query result containing areas and products
+    Returns:
+        tuple: A tuple containing the city tile ID, coordinates of the city footprint, and a boolean indicating if the footprint was found
+    """
+    # Check if the result contains areas
     if not result or 'areas' not in result or not result['areas']:
         return None, None, None
     
+    # Extract the first area from the result
     area = result['areas'][0]
     city_tile_id = None
     coords = []
@@ -107,7 +126,16 @@ def get_city_tile_info(result):
     return city_tile_id, coords, city_footprint_found
 
 def generate_random_point(lat, lon, args, city_polygon=None):
-    """Generate a random point at the specified distance from the city"""
+    """Generate a random point at the specified distance from the city
+    
+    Parameters:
+        lat (float): Latitude of the city
+        lon (float): Longitude of the city
+        args (argparse.Namespace): Parsed command line arguments
+        city_polygon (Polygon, optional): Polygon representing the city footprint
+    Returns:
+        tuple: A tuple containing the latitude, longitude, and a boolean indicating if the point is on land
+    """
     # If we have a city polygon, try to find a point outside it
     if city_polygon:
         max_attempts = 20
@@ -143,14 +171,22 @@ def generate_random_point(lat, lon, args, city_polygon=None):
     )
 
 def process_city(city, args, unified_result):
-    """Process a single city and its random point"""
+    """Process a single city and its random point
+    
+    Parameters:
+        city (dict): Dictionary containing city information
+        args (argparse.Namespace): Parsed command line arguments
+        unified_result (dict): Dictionary to store the unified result
+    Returns:
+        tuple: A tuple containing the number of random points on land, in water, and skipped
+    """
     lat, lon = city['lat'], city['lng']
     city_name = city['city']
 
     # Initialize city_polygon to None
     city_polygon = None
 
-    
+
     # Query for the city center
     log.info(f"\nCity: {city_name} ({lat}, {lon})")
     result = query_sentinel2_by_coordinates(
@@ -227,7 +263,15 @@ def process_city(city, args, unified_result):
 
 
 def save_results(unified_result, output_dir, year_filter):
-    """Save the unified result to a JSON file."""
+    """Save the unified result to a JSON file.
+    
+    Parameters:
+        unified_result (dict): The unified result containing areas and properties
+        output_dir (str): Directory to save the output file
+        year_filter (str): Year filter used in the query
+    Returns:
+        str: Path to the saved JSON file
+    """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     unified_file = os.path.join(output_dir, f"S2_GlobalMosaics_{year_filter}_unified_{timestamp}.json")
     with open(unified_file, 'w') as f:
@@ -295,11 +339,19 @@ def main():
     # Load and select cities
     log.info("\n=== Step 1: Loading and selecting cities ===")
     cities_df = load_city_data(args.cities_csv, args.population_min)
+    if cities_df.empty:
+        log.error("No cities found.")
+        sys.exit(1)
+
     selected_cities = select_dispersed_cities(
         cities_df, 
         args.num_cities,
         min_distance_km=args.min_city_distance
     )
+    if selected_cities.empty:
+        log.error("No cities found that meet the criteria.")
+        sys.exit(1)
+
     log.info(f"Selected {len(selected_cities)} dispersed cities")
     
     # Save selected cities to CSV
@@ -351,10 +403,17 @@ def main():
     total_random_points_attempted = random_points_on_land + random_points_in_water + skipped_random_points
     total_random_points_generated = random_points_on_land + random_points_in_water
     
+
     # Calculate percentages
-    land_percent = (random_points_on_land / total_random_points_generated * 100) if total_random_points_generated > 0 else 0
-    water_percent = (random_points_in_water / total_random_points_generated * 100) if total_random_points_generated > 0 else 0
-    skipped_percent = (skipped_random_points / total_random_points_attempted * 100) if total_random_points_attempted > 0 else 0
+    try:
+        land_percent = (random_points_on_land / total_random_points_generated * 100) if total_random_points_generated > 0 else 0
+        water_percent = (random_points_in_water / total_random_points_generated * 100) if total_random_points_generated > 0 else 0
+        skipped_percent = (skipped_random_points / total_random_points_attempted * 100) if total_random_points_attempted > 0 else 0
+    except ZeroDivisionError:
+        log.error("Division by zero error while calculating percentages.")
+        land_percent = 0
+        water_percent = 0
+        skipped_percent = 0
     
     log.info(f"\n=== Summary ===")
     log.info(f"- Selected {len(selected_cities)} dispersed cities")

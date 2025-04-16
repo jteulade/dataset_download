@@ -24,6 +24,9 @@ def download_natural_earth_land(output_dir):
     """
     Download Natural Earth land polygons at 1:110m scale.
     
+    Parameters:
+        output_dir (str): Directory to save the downloaded polygons
+   
     Returns:
         bool: True if download was successful, False otherwise
     """
@@ -69,7 +72,14 @@ def download_natural_earth_land(output_dir):
         logging.error(f"Error downloading land polygons: {e}")
         return False
 
+
 def parse_arguments():
+    """
+    Parse command line arguments.
+
+    Returns:
+        argparse.Namespace: Parsed arguments
+    """
     parser = argparse.ArgumentParser(description="Download Natural Earth land polygons.")
     parser.add_argument("--output-dir", type=str, default="data",
                         help="Directory to save the downloaded polygons")
