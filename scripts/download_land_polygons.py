@@ -24,7 +24,7 @@ def download_natural_earth_land(output_dir):
     """
     Download Natural Earth land polygons at 1:110m scale.
     
-    Parameters:
+    Args:
         output_dir (str): Directory to save the downloaded polygons
    
     Returns:

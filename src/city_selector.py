@@ -3,6 +3,9 @@ City Selector Module
 
 This module provides functions for loading city data and selecting geographically
 dispersed cities using a greedy algorithm.
+
+Documentation for this algorithm can be found here :
+https://arxiv.org/pdf/2103.16607
 """
 
 import pandas as pd
@@ -93,6 +96,7 @@ def post_process_city_selection(selected_cities, all_cities, min_distance_km=500
                     city2['lat'], city2['lng']
                 )
                 
+                # Check if this is the closest pair found so far
                 if dist < min_dist:
                     min_dist = dist
                     closest_pair = (i, j)

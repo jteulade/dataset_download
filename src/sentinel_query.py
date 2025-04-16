@@ -22,7 +22,6 @@ from src.token_manager import ensure_valid_token, get_access_token
 # Global variable to store the land polygons once loaded
 _LAND_POLYGONS = None
 
-
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)

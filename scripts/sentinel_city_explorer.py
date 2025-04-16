@@ -30,7 +30,7 @@ from src.token_manager import get_access_token
 def setup_random_seed(seed=None):
     """Set up random seed for reproducibility
     
-    Parameters:
+    Args:
         seed (int): Random seed value. If None, a random seed will be generated.
    
     Returns:

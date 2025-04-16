@@ -446,6 +446,12 @@ def create_mosaic_map(cities_results, output_file='maps/city_mosaics_map.html'):
                     opacity=0.5,
                     dash_array='3, 5'
                 ).add_to(connection_group)
+            except KeyError as e:
+                print(f"KeyError processing tile {feature.get('title', 'Unknown')}: {e}")
+            except ValueError as e:
+                print(f"ValueError processing tile {feature.get('title', 'Unknown')}: {e}")
+            except TypeError as e:
+                print(f"TypeError processing tile {feature.get('title', 'Unknown')}: {e}")
             except Exception as e:
                 print(f"Error processing tile {feature.get('title', 'Unknown')}: {e}")
     
