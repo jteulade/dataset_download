@@ -7,28 +7,61 @@ A simple tool to explore Sentinel-2 data for cities and download Sentinel-2 tile
 - Python 3.6 or higher
 - Required Python packages: see `requirements.txt`
 
-## Installation
+##  Installation
 
-1. Clone or download this repository.
+### 1. Cloner ou télécharger ce dépôt
 
-2. Install the required packages:
+Clonez le dépôt via Git ou téléchargez-le manuellement :
 
-   Make the script executable:
+```bash
+git clone git@github.com:jteulade/dataset_download.git
+cd dataset_download
+```
 
-  ```bash
-  chmod +x ./installation/install_package.bash
-  ```
-  Run the script:
+---
 
-  ```bash
-  ./installation/install_package.bash
-  ```
-3. Make the scripts executable:
+### 2. Installer les dépendances nécessaires
+
+####  Utilisateurs Linux
+
+Rendez le script d'installation exécutable :
+
+```bash
+chmod +x ./installation/install_package.bash
+```
+
+Puis exécutez-le :
+
+```bash
+./installation/install_package.bash
+```
+
+---
+
+####  Utilisateurs Windows
+
+1. Téléchargez et installez **Conda pour Windows** :  
+ [https://www.anaconda.com/download/success](https://www.anaconda.com/download/success)
+
+2. Ouvrez **Anaconda Prompt**, puis tapez :
+
+```bash
+conda create -n mon_env python=3.10
+conda activate mon_env
+pip install -r requirements.txt
+```
+
+>  Vous devez utiliser **Anaconda Prompt** pour exécuter les scripts.
+
+---
+
+### 3. Rendre les scripts exécutables (Linux/macOS uniquement)
+
 ```bash
 chmod +x scripts/*.py
 ```
 
-[More information about installation](./installation/install.md)
+---
 ## Authentication
 
 To download tiles, you need a valid Copernicus Data Space API token:
