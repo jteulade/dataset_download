@@ -13,30 +13,22 @@ A simple tool to explore Sentinel-2 data for cities and download Sentinel-2 tile
 
 2. Install the required packages:
 
-   - You need to install Conda first:
-     - Download the installer from this website: [https://www.anaconda.com/download/](https://www.anaconda.com/download/).
-     - Execute the following command to give execution rights to the script:
-       ```bash
-       chmod +x /path/to/the/script.sh
-       ```
-     - Run the installer silently with default values:
-       ```bash
-       bash SCRIPT_NAME.sh -b
-       ```
-     - Activate Conda:
-       ```bash
-       source $HOME/anaconda3/bin/activate
-       ```
-   - Install the required Python packages:
-     ```bash
-     pip install -r requirements.txt
-     ```
+   Make the script executable:
 
+  ```bash
+  chmod +x ./installation/install_package.bash
+  ```
+  Run the script:
+
+  ```bash
+  ./installation/install_package.bash
+  ```
 3. Make the scripts executable:
-   ```bash
-   chmod +x scripts/*.py
-   ```
+```bash
+chmod +x scripts/*.py
+```
 
+[More information about installation](./installation/install.md)
 ## Authentication
 
 To download tiles, you need a valid Copernicus Data Space API token:
@@ -133,6 +125,18 @@ This an example of the map you can have with 5 cities :
 1. Download land polygons (if not already downloaded):
    ```bash
    python scripts/download_land_polygons.py
+   ```
+
+   This is the directory data you will have :
+
+   ```bash
+   ├── ne_110m_land.cpg
+   ├── ne_110m_land.dbf
+   ├── ne_110m_land.prj
+   ├── ne_110m_land.README.html
+   ├── ne_110m_land.shp
+   ├── ne_110m_land.shx
+   └── ne_110m_land.VERSION.txt
    ```
 
 2. Run the city explorer to find Sentinel-2 data:
