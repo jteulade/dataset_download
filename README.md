@@ -9,9 +9,9 @@ A simple tool to explore Sentinel-2 data for cities and download Sentinel-2 tile
 
 ##  Installation
 
-### 1. Cloner ou télécharger ce dépôt
+### 1.  Clone or Download this Repository
 
-Clonez le dépôt via Git ou téléchargez-le manuellement :
+Clone the repository via Git or download it manually:
 
 ```bash
 git clone git@github.com:jteulade/dataset_download.git
@@ -20,17 +20,17 @@ cd dataset_download
 
 ---
 
-### 2. Installer les dépendances nécessaires
+### 2. Install the Required Dependencies
 
-####  Utilisateurs Linux
+####  Linux Users
 
-Rendez le script d'installation exécutable :
+Make the installation script executable:
 
 ```bash
 chmod +x ./installation/install_package.bash
 ```
 
-Puis exécutez-le :
+Then execute it:
 
 ```bash
 ./installation/install_package.bash
@@ -38,12 +38,12 @@ Puis exécutez-le :
 
 ---
 
-####  Utilisateurs Windows
+####  Windows Users
 
-1. Téléchargez et installez **Conda pour Windows** :  
+1. Download and install  **Conda pour Windows** :  
  [https://www.anaconda.com/download/success](https://www.anaconda.com/download/success)
 
-2. Ouvrez **Anaconda Prompt**, puis tapez :
+2. Open **Anaconda Prompt**, then type:
 
 ```bash
 conda create -n mon_env python=3.10
@@ -51,11 +51,11 @@ conda activate mon_env
 pip install -r requirements.txt
 ```
 
->  Vous devez utiliser **Anaconda Prompt** pour exécuter les scripts.
+>  You must use **Anaconda Prompt** to execute the scripts.
 
 ---
 
-### 3. Rendre les scripts exécutables (Linux/macOS uniquement)
+### 3. Make the Scripts Executable (Linux/macOS Only)
 
 ```bash
 chmod +x scripts/*.py
