@@ -690,7 +690,7 @@ class SentinelDownloader:
                 if "properties" in feature:
                     # New format
                     properties = feature["properties"]
-                    tile_id = properties.get("title", "unknown")
+                    tile_id = properties.get("title", "unknown")1
                 else:
                     # Old format
                     properties = feature
@@ -707,4 +707,4 @@ class SentinelDownloader:
                 logging.error(f"Error downloading tile {i+1}: {str(e)}")
                 continue
         
-        return downloaded_files
+        return downloaded_files                  

@@ -16,3 +16,8 @@ Je vais maintenant mettre des exemples d'utilisations de chaques scripts.
 
 Quand on applique des filtres et qu'on tombe sur une tuile d'une île, pour obtenir sa tuile voisine, si celle-ci est uniquement composée d'eau, on conserve tout de même la tuile. Cela entraîne une situation où l'on dispose de seulement 4 mosaïques au lieu des 8 nécessaires pour une ville. 
 Il serait peut-etre ne pas selectionne la tuile si on ne trouve pas de tuile voisine.
+
+J'ai eu un probleme car le script bash que j'avais fais ne nous permettait pas de rester sur conda car toute modification de l'environnement (comme l'activation de Conda) est limitée à la session du script et ne persiste pas dans le terminal parent. On doit donc utiliser le . avant d'executer le script.res et qu'on tombe sur une tuile d'une île, pour obtenir sa tuile voisine, si celle-ci est uniquement composée d'eau, on conserve tout de même la tuile. Cela entraîne une situation où l'on dispose de seulement 4 mosaïques au lieu des 8 nécessaires pour une ville. 
+Il serait peut-etre ne pas selectionne la tuile si on ne trouve pas de tuile voisine.
+
+J'ai eu un probleme car le script bash que j'avais fais ne nous permettait pas de rester sur conda car toute modification de l'environnement (comme l'activation de Conda) est limitée à la session du script et ne persiste pas dans le terminal parent. On doit donc utiliser le . avant de d'executer le script.
