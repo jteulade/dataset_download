@@ -690,7 +690,7 @@ class SentinelDownloader:
                 if "properties" in feature:
                     # New format
                     properties = feature["properties"]
-                    tile_id = properties.get("title", "unknown")1
+                    tile_id = properties.get("title", "unknown")
                 else:
                     # Old format
                     properties = feature
