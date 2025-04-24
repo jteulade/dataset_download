@@ -215,7 +215,7 @@ def query_sentinel2_by_coordinates(lat, lon, year="2023", output_dir="results",
     if len(final_products) != 4:
         found_quarters = set(p.get('quarter') for p in final_products)
         missing_quarters = set(quarters) - found_quarters
-        logging.warning(f"\033[31mWarning: Found {len(final_products)} products instead of expected 4.\033[0m")
+        logging.warning(f"Warning: Found {len(final_products)} products instead of expected 4.")
         logging.warning(f"Missing quarters: {missing_quarters}")
         logging.warning(f"Found quarters: {found_quarters}")
         return None
@@ -262,11 +262,11 @@ def handle_api_error(response, year, quarter):
         quarter (str): The quarter of the query.
     """
     if response.status_code != 200:
-        logging.error(f"\033[31mError: Failed to fetch data for {year} {quarter}. Status code: {response.status_code}\033[0m")
+        logging.error(f"Error: Failed to fetch data for {year} {quarter}. Status code: {response.status_code}")
         sys.exit(1)
     result = response.json()
     if not result.get('value', []):
-        logging.error(f"\033[31mError: No products found for {year} {quarter}. Stopping execution.\033[0m")
+        logging.error(f"Error: No products found for {year} {quarter}. Stopping execution.")
         sys.exit(1)
     return result
 

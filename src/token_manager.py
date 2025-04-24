@@ -75,7 +75,7 @@ def generate_token(token_file=None):
                 "password": password,
                 "grant_type": "password"
             },
-            timeout=10 
+            timeout=10  # Setting a timeout of 10 seconds to avoid the request hanging indefinitely
         )
         response.raise_for_status()
 
@@ -90,10 +90,6 @@ def generate_token(token_file=None):
             logging.warning(f"Token will expire in {token_data.get('expires_in', 'unknown')} seconds")
         return token_data
         
-    except requests.exceptions.HTTPError as e:
-        logging.error(f"HTTP error: {e}")
-    except requests.exceptions.Timeout as e:
-        logging.error(f"Request timed out: {e}")
     except requests.exceptions.RequestException as e:
         logging.error(f"Request error: {e}")
     except Exception as e:
