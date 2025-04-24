@@ -27,12 +27,12 @@ from src.city_selector import load_city_data, select_dispersed_cities
 from src.sentinel_query import query_sentinel2_by_coordinates, get_random_point_at_distance, is_point_on_land
 from src.token_manager import get_access_token
 
-def setup_random_seed(seed=None):
+def setup_random_seed(seed : int =None):
     """Set up random seed for reproducibility
     
     Args:
-        seed (int): Random seed value. If None, a random seed will be generated.
-   
+        seed : Random seed value. If None, a random seed will be generated.
+
     Returns:
         int: The random seed used.
     """
@@ -53,7 +53,7 @@ def parse_arguments():
     """Parse command line arguments
     
     Returns:
-        argparse.Namespace: Parsed arguments
+        Parsed arguments
     """
     parser = argparse.ArgumentParser(description="Query Sentinel-2 Global Mosaics data for dispersed cities")
     parser.add_argument("--cities-csv", type=str, default="worldcities.csv",

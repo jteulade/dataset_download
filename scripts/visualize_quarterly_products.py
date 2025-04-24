@@ -22,16 +22,16 @@ sys.path.append(project_root)
 
 from src.map_visualizer import create_mosaic_map
 
-def process_quarterly_products(json_file):
+def process_quarterly_products(json_file : str):
     """
     Process the JSON file containing quarterly products and convert it to the format
     expected by the map visualization module.
     
     Args:
-        json_file (str): Path to the JSON file containing quarterly products
+        json_file : Path to the JSON file containing quarterly products
         
     Returns:
-        list: List of results in the format expected by create_mosaic_map
+        List of results in the format expected by create_mosaic_map
     """
     with open(json_file, 'r') as f:
         data = json.load(f)

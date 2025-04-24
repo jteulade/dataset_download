@@ -32,18 +32,18 @@ data_dir = os.path.join(project_root, 'data')
 os.makedirs(data_dir, exist_ok=True)
 import sys
 
-def make_sentinel_request(url, headers, params, max_retries=2):
+def make_sentinel_request(url : str, headers : dict, params : dict, max_retries : int =2):
     """
     Make a request to the Sentinel API with token refresh handling.
     
     Args:
-        url (str): The URL to request
-        headers (dict): The request headers
-        params (dict): The request parameters
-        max_retries (int): Maximum number of retries
+        url : The URL to request
+        headers : The request headers
+        params : The request parameters
+        max_retries : Maximum number of retries
         
     Returns:
-        requests.Response: The response from the API
+        The response from the API
     """
     for retry in range(max_retries + 1):
         response = requests.get(url, headers=headers, params=params)
@@ -58,18 +58,18 @@ def make_sentinel_request(url, headers, params, max_retries=2):
         return response
     return response
 
-def process_product(product, quarter, query_point):
+def process_product(product : dict, quarter : str, query_point):
     """
     Process a single Sentinel product and check if it contains the query point.
     
     Args:
-        product (dict): The product data from the API
-        quarter (str): The quarter (Q1, Q2, Q3, Q4)
-        query_point (tuple): The query point coordinates (lon, lat)
+        product : The product data from the API
+        quarter : The quarter (Q1, Q2, Q3, Q4)
+        query_point : The query point coordinates (lon, lat)
         
     Returns:
-        tuple: (product_entry, contains_point) where product_entry is the processed product
-               and contains_point is a boolean indicating if the product contains the query point
+        (product_entry, contains_point) where product_entry is the processed product
+            and contains_point is a boolean indicating if the product contains the query point
     """
     try:
         product_entry = dict(product)
@@ -97,13 +97,13 @@ def process_product(product, quarter, query_point):
         logging.error(f"Unexpected error while processing product: {e}")
         return None, False
 
-def select_best_products(products_containing_point, quarterly_products):
+def select_best_products(products_containing_point : list, quarterly_products : list):
     """
     Select the best products based on tile ID and query point containment.
     
     Args:
-        products_containing_point (list): List of products that contain the query point
-        quarterly_products (list): List of all quarterly products
+        products_containing_point : List of products that contain the query point
+        quarterly_products : List of all quarterly products
         
     Returns:
         list: The selected products
@@ -144,24 +144,24 @@ def select_best_products(products_containing_point, quarterly_products):
     
     return final_products
 
-def query_sentinel2_by_coordinates(lat, lon, year="2023", output_dir="results",
-                                  city_name=None, city_lat=None, city_lon=None, is_neighbor=False, save_results=False):
+def query_sentinel2_by_coordinates(lat : float, lon : float, year : str ="2023", output_dir : str ="results",
+                                  city_name : str =None, city_lat : float =None, city_lon : float =None, is_neighbor : bool =False, save_results : bool =False):
     """
     Query Sentinel-2 data for the specified coordinates and year.
     
     Args:
-        lat (float): Latitude
-        lon (float): Longitude
-        year (str): Year to filter for
-        output_dir (str): Directory to save output files
-        city_name (str, optional): Name of the associated city
-        city_lat (float, optional): Latitude of the associated city
-        city_lon (float, optional): Longitude of the associated city
-        is_neighbor (bool): Whether this is a neighbor (random) point
-        save_results (bool): Whether to save individual results to files
+        lat : Latitude
+        lon : Longitude
+        year : Year to filter for
+        output_dir : Directory to save output files
+        city_name : Name of the associated city
+        city_lat : Latitude of the associated city
+        city_lon : Longitude of the associated city
+        is_neighbor : Whether this is a neighbor (random) point
+        save_results : Whether to save individual results to files
         
     Returns:
-        dict or None: The query result, or None if the query failed
+        The query result, or None if the query failed
     """
     access_token = get_access_token()
     if not access_token:
@@ -252,14 +252,14 @@ def query_sentinel2_by_coordinates(lat, lon, year="2023", output_dir="results",
     
     return result
 
-def handle_api_error(response, year, quarter):
+def handle_api_error(response, year : str, quarter : str):
     """
     Handle API errors and stop execution if necessary.
     
     Args:
-        response (requests.Response): The API response object.
-        year (str): The year of the query.
-        quarter (str): The quarter of the query.
+        response : The API response object.
+        year : The year of the query.
+        quarter : The quarter of the query.
     """
     try:
         response.raise_for_status()
@@ -273,17 +273,17 @@ def handle_api_error(response, year, quarter):
         sys.exit(1)
     return result
 
-def is_point_on_land(lat, lon, debug=False):
+def is_point_on_land(lat : float, lon : float, debug : bool=False):
     """
     Check if a geographic point is on land or in water.
     
     Args:
-        lat (float): Latitude of the point
-        lon (float): Longitude of the point
-        debug (bool): Whether to print debug information
+        lat : Latitude of the point
+        lon : Longitude of the point
+        debug : Whether to print debug information
         
     Returns:
-        bool: True if the point is on land, False if it's in water
+        True if the point is on land, False if it's in water
     """
     global _LAND_POLYGONS
     
@@ -313,22 +313,22 @@ def is_point_on_land(lat, lon, debug=False):
     
     return any(point.within(row.geometry) for _, row in _LAND_POLYGONS.iterrows())
 
-def get_random_point_at_distance(lat, lon, distance_km, ensure_on_land=True, max_attempts=10, debug=False):
+def get_random_point_at_distance(lat : float, lon : float, distance_km : float, ensure_on_land : bool =True, max_attempts : int =10, debug : bool =False):
     """
     Generate a random point at a specified distance from a given location.
     Optionally ensure the point is on land.
     
     Args:
-        lat (float): Latitude of the center point
-        lon (float): Longitude of the center point
-        distance_km (float): Distance in kilometers
-        ensure_on_land (bool): If True, ensure the generated point is on land
-        max_attempts (int): Maximum number of attempts to find a point on land
-        debug (bool): Whether to print debug information
+        lat : Latitude of the center point
+        lon : Longitude of the center point
+        distance_km : Distance in kilometers
+        ensure_on_land : If True, ensure the generated point is on land
+        max_attempts : Maximum number of attempts to find a point on land
+        debug : Whether to print debug information
         
     Returns:
-        tuple or None: (latitude, longitude, is_on_land) of the random point, or None if ensure_on_land is True
-                      and no land point could be found after max_attempts
+        (latitude, longitude, is_on_land) of the random point, or None if ensure_on_land is True
+                and no land point could be found after max_attempts
     """
     if not ensure_on_land:
         new_lat, new_lon = _generate_random_point_at_distance(lat, lon, distance_km)
@@ -341,17 +341,17 @@ def get_random_point_at_distance(lat, lon, distance_km, ensure_on_land=True, max
     
     return None
 
-def _generate_random_point_at_distance(lat, lon, distance_km):
+def _generate_random_point_at_distance(lat : float, lon : float, distance_km : float):
     """
     Generate a random point at a specified distance from a given location.
     
     Args:
-        lat (float): Latitude of the center point
-        lon (float): Longitude of the center point
-        distance_km (float): Distance in kilometers
+        lat : Latitude of the center point
+        lon : Longitude of the center point
+        distance_km : Distance in kilometers
         
     Returns:
-        tuple: (latitude, longitude) of the random point
+        (latitude, longitude) of the random point
     """
     R = 6371.0  # Earth's radius in kilometers
     distance_rad = distance_km / R
