@@ -48,13 +48,13 @@ def create_mosaic_map(cities_results : list, output_file : str ='maps/city_mosai
     Returns:
         Path to the saved HTML map file
     """
-    logging.INFO(f"Creating interactive map with {len(cities_results)} cities and their Sentinel-2 tiles")
+    logging.info(f"Creating interactive map with {len(cities_results)} cities and their Sentinel-2 tiles")
     
     # Create a map centered at the average of all coordinates
     valid_coords = [(r['lat'], r['lon']) for r in cities_results if r['count'] > 0]
     
     if not valid_coords:
-        logging.WARNING("No valid coordinates with Sentinel-2 data found")
+        logging.warning("No valid coordinates with Sentinel-2 data found")
         return None
     
     avg_lat = sum(lat for lat, _ in valid_coords) / len(valid_coords)
