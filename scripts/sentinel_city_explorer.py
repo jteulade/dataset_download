@@ -218,7 +218,7 @@ def process_city(city : dict, args, unified_result : dict):
     
     # Generate random point
     logging.info(f"\nGenerating random point {args.random_distance} km away from {city_name}...")
-    random_point_result = generate_random_point(lat, lon, args, city_polygon if city_polygon else None)
+    random_point_result = generate_random_point(lat, lon, args, city_polygon)
     
     # Skip if no random point found
     if random_point_result is None:

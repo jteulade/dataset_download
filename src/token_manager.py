@@ -10,6 +10,7 @@ import json
 import getpass
 import logging
 import requests
+from requests.exceptions import HTTPError, Timeout, RequestException
 
 # Global constants
 TOKEN_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
@@ -90,10 +91,8 @@ def generate_token(token_file=None):
             logging.warning(f"Token will expire in {token_data.get('expires_in', 'unknown')} seconds")
         return token_data
         
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Request error: {e}")
-    except Exception as e:
-        logging.error(f"Error generating token: {e}")
+    except (HTTPError , RequestException, Exception) as e:
+       logging.error(f"Error generating token: {e}")
     return None
 
 def refresh_token(token_data=None, token_file=None):
@@ -123,17 +122,8 @@ def refresh_token(token_data=None, token_file=None):
             logging.warning(f"New token will expire in {new_token_data.get('expires_in', 'unknown')} seconds")
         return new_token_data
     
-    # Handle specific exceptions
-    except requests.exceptions.HTTPError as e:
-        logging.error(f"HTTP error: {e}")
-        return generate_token(token_file)
-    except requests.exceptions.Timeout as e:
-        logging.error(f"Request timed out: {e}")
-        return generate_token(token_file)
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Request error: {e}")
-        return generate_token(token_file)
-    except Exception as e:
+
+    except (HTTPError , RequestException,Timeout, Exception) as e:
         logging.error(f"Error refreshing token: {e}")
         return generate_token(token_file)
 

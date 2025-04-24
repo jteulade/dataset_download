@@ -13,18 +13,15 @@ from datetime import datetime, timedelta
 import math
 import random
 import numpy as np
-from shapely.geometry import Point # type: ignore
-from shapely.geometry.polygon import Polygon # type: ignore
-import geopandas as gpd # type: ignore
+from shapely.geometry import Point 
+from shapely.geometry.polygon import Polygon
+import geopandas as gpd
 import warnings
 from src.token_manager import ensure_valid_token, get_access_token
 
 # Global variable to store the land polygons once loaded
 _LAND_POLYGONS = None
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 # Create data directory path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -90,9 +87,7 @@ def process_product(product : dict, quarter : str, query_point):
                 logging.error(f"Error checking if point is in tile: {e}")
         
         return product_entry, False
-    except KeyError as e:
-        logging.error(f"KeyError while processing product: {e}")
-        return None, False
+
     except Exception as e:
         logging.error(f"Unexpected error while processing product: {e}")
         return None, False
@@ -204,6 +199,7 @@ def query_sentinel2_by_coordinates(lat : float, lon : float, year : str ="2023",
             product_entry, contains_point = process_product(product, quarter, (lon, lat))
             if contains_point:
                 products_containing_point.append(product_entry)
+            quarterly_products.append(product_entry)
        
     
     # Select the best products, passing both city coordinates and query point

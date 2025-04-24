@@ -447,13 +447,7 @@ def create_mosaic_map(cities_results : list, output_file : str ='maps/city_mosai
                     opacity=0.5,
                     dash_array='3, 5'
                 ).add_to(connection_group)
-            except KeyError as e:
-                logging.error(f"KeyError processing tile {feature.get('title', 'Unknown')}: {e}")
-            except ValueError as e:
-                logging.error(f"ValueError processing tile {feature.get('title', 'Unknown')}: {e}")
-            except TypeError as e:
-                logging.error(f"TypeError processing tile {feature.get('title', 'Unknown')}: {e}")
-            except Exception as e:
+            except (KeyError, ValueError, TypeError, Exception) as e:
                 logging.error(f"Error processing tile {feature.get('title', 'Unknown')}: {e}")
     
     # Add layer control

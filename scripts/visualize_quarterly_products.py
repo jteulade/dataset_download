@@ -63,7 +63,7 @@ def process_quarterly_products(json_file : str):
             # Add the feature to the result
             result['features'].append(feature)
         
-        # Add the result to the listlogging.info(f"Processing quarterly products from {args.input_json}")
+        # Add the result to the list
         results.append(result)
     
     return results
