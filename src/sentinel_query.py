@@ -261,12 +261,15 @@ def handle_api_error(response, year, quarter):
         year (str): The year of the query.
         quarter (str): The quarter of the query.
     """
-    if response.status_code != 200:
-        logging.error(f"Error: Failed to fetch data for {year} {quarter}. Status code: {response.status_code}")
+    try:
+        response.raise_for_status()
+    except Exception as e:
+        logging.error(f"HTTP error: {e}")
         sys.exit(1)
+
     result = response.json()
     if not result.get('value', []):
-        logging.error(f"Error: No products found for {year} {quarter}. Stopping execution.")
+        logging.error(f"Error: No products found for {year} {quarter}. Stopping execution.\033[0m")
         sys.exit(1)
     return result
 
