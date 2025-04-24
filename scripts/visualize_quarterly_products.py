@@ -8,13 +8,13 @@ quarterly products and their footprints.
 
 import argparse
 import json
-import logging as log
+import logging
 import os
 from datetime import datetime
 from pathlib import Path
 import sys
 
-log.basicConfig(level=log.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Add the project root directory to the Python path
 project_root = str(Path(__file__).parent.parent)
@@ -63,7 +63,7 @@ def process_quarterly_products(json_file):
             # Add the feature to the result
             result['features'].append(feature)
         
-        # Add the result to the listlog.info(f"Processing quarterly products from {args.input_json}")
+        # Add the result to the listlogging.info(f"Processing quarterly products from {args.input_json}")
         results.append(result)
     
     return results
@@ -78,14 +78,14 @@ def main():
     args = parser.parse_args()
     
     # Process the quarterly products
-    log.info(f"Processing quarterly products from {args.input_json}")
+    logging.info(f"Processing quarterly products from {args.input_json}")
     results = process_quarterly_products(args.input_json)
     
     # Create the interactive map
-    log.info(f"Creating interactive map with {len(results)} areas")
+    logging.info(f"Creating interactive map with {len(results)} areas")
     create_mosaic_map(results, args.output_map)
     
-    log.info(f"\nMap saved to {args.output_map}")
+    logging.info(f"\nMap saved to {args.output_map}")
 
 if __name__ == "__main__":
     main() 

@@ -20,15 +20,15 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 project_root = str(Path(__file__).parent.parent)
 sys.path.append(project_root)
 
-def download_natural_earth_land(output_dir):
+def download_natural_earth_land(output_dir : str):
     """
     Download Natural Earth land polygons at 1:110m scale.
     
     Args:
-        output_dir (str): Directory to save the downloaded polygons
+        output_dir : Directory to save the downloaded polygons
    
     Returns:
-        bool: True if download was successful, False otherwise
+        True if download was successful, False otherwise
     """
     os.makedirs(output_dir, exist_ok=True)
     
@@ -77,8 +77,6 @@ def parse_arguments():
     """
     Parse command line arguments.
 
-    Returns:
-        argparse.Namespace: Parsed arguments
     """
     parser = argparse.ArgumentParser(description="Download Natural Earth land polygons.")
     parser.add_argument("--output-dir", type=str, default="data",

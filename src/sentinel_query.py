@@ -6,7 +6,7 @@ This module provides functions for querying Sentinel-2 Global Mosaics data from 
 
 import os
 import json
-import logging
+import logging 
 import requests
 import sys
 from datetime import datetime, timedelta
@@ -195,7 +195,8 @@ def query_sentinel2_by_coordinates(lat, lon, year="2023", output_dir="results",
         }
 
         response = make_sentinel_request(url, headers, params)
-        logging.info(f"\n{year} {quarter}:")
+        print(f"\n")
+        logging.info(f"{year} {quarter}:")
         logging.info(f"Status code: {response.status_code}")
         
         result = handle_api_error(response, year, quarter)

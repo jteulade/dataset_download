@@ -4,7 +4,7 @@ Script to generate a new token for the Copernicus Data Space API.
 """
 
 import sys
-import logging as log
+import logging
 from pathlib import Path
 
 # Add the project root directory to the Python path
@@ -14,12 +14,12 @@ sys.path.append(project_root)
 from src.token_manager import generate_token
 
 def main():
-    log.info("Generating new token...")
+    logging.info("Generating new token...")
     token_data = generate_token()
     if token_data:
-        log.info("Token generated successfully!")
+        logging.info("Token generated successfully!")
     else:
-        log.error("Failed to generate token.")
+        logging.error("Failed to generate token.")
         sys.exit(1)
 
 if __name__ == "__main__":

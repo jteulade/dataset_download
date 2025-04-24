@@ -39,10 +39,10 @@ class SentinelDownloader:
         # Initial token check
         self.access_token = get_access_token()
         if self.access_token:
-            logger.info("Access token loaded successfully")
+            logging.info("Access token loaded successfully")
         else:
-            logger.warning("No valid access token available")
-            logger.info("You can still search for tiles, but downloading will require authentication")
+            logging.warning("No valid access token available")
+            logging.info("You can still search for tiles, but downloading will require authentication")
     
     def is_token_valid(self):
         """Check if the current access token is valid."""
@@ -52,25 +52,25 @@ class SentinelDownloader:
     
     def refresh_access_token(self):
         """Refresh the access token using the refresh token."""
-        logger.info("Refreshing access token...")
+        logging.info("Refreshing access token...")
         # Always refresh the token using token_manager
         self.access_token = get_access_token()
         if self.access_token:
-            logger.info("Access token refreshed successfully")
+            logging.info("Access token refreshed successfully")
             return True
         else:
-            logger.warning("Failed to refresh access token")
+            logging.warning("Failed to refresh access token")
             return False
     
-    def extract_tile_info_from_feature(self, feature):
+    def extract_tile_info_from_feature(self, feature : dict):
         """
         Extract tile information from a feature in the JSON file.
         
         Args:
-            feature (dict): The feature containing the tile information
+            feature : The feature containing the tile information
             
         Returns:
-            dict: The processed feature with tile information
+            The processed feature with tile information
         """
         # Check if this is the old JSON format (with properties key)
         if 'properties' in feature:
@@ -147,16 +147,16 @@ class SentinelDownloader:
             
             return processed_feature
     
-    def search_tile_by_id(self, tile_id, year_filter=None):
+    def search_tile_by_id(self, tile_id : str, year_filter : str =None):
         """
         Search for a Sentinel-2 tile by its ID.
         
         Args:
-            tile_id (str): The tile ID to search for
-            year_filter (str, optional): Year to filter for (e.g., '2022')
+            tile_id : The tile ID to search for
+            year_filter : Year to filter for (e.g., '2022')
             
         Returns:
-            dict: The feature containing the tile information, or None if not found
+            The feature containing the tile information, or None if not found
         """
         # Set default dates based on year filter
         if year_filter:
@@ -179,21 +179,21 @@ class SentinelDownloader:
             # Removed the 'q' parameter that was causing the 400 error
         }
         
-        logger.info(f"Searching for Sentinel-2 tile with ID: {tile_id}")
+        logging.info(f"Searching for Sentinel-2 tile with ID: {tile_id}")
         
         # Make the request
         try:
-            logger.info(f"Sending request to: {self.CATALOGUE_URL}")
-            logger.info(f"With parameters: {params}")
+            logging.info(f"Sending request to: {self.CATALOGUE_URL}")
+            logging.info(f"With parameters: {params}")
             
             response = requests.get(self.CATALOGUE_URL, params=params)
             
             # Log the full URL for debugging
-            logger.info(f"Full request URL: {response.url}")
+            logging.info(f"Full request URL: {response.url}")
             
             # Check response status
             if response.status_code != 200:
-                logger.error(f"API error: {response.status_code} - {response.text}")
+                logging.error(f"API error: {response.status_code} - {response.text}")
                 return None
             
             # Parse the JSON response
@@ -201,10 +201,10 @@ class SentinelDownloader:
             
             # Check if we have features
             if 'features' not in json_data or len(json_data['features']) == 0:
-                logger.warning(f"No results found in the search response")
+                logging.warning(f"No results found in the search response")
                 return None
             
-            logger.info(f"Found {len(json_data['features'])} features in the search response")
+            logging.info(f"Found {len(json_data['features'])} features in the search response")
             
             # Look for the exact tile ID in the features
             matching_features = []
@@ -214,13 +214,13 @@ class SentinelDownloader:
                 
                 # Check if the tile ID is in the title
                 if tile_id in title:
-                    logger.info(f"Found matching tile: {title}")
+                    logging.info(f"Found matching tile: {title}")
                     
                     # Extract download URL
                     download_url = props.get('services', {}).get('download', {}).get('url')
                     
                     if not download_url:
-                        logger.warning(f"No download URL found for tile: {title}")
+                        logging.warning(f"No download URL found for tile: {title}")
                         continue
                     
                     # Extract product ID for OData API
@@ -248,32 +248,32 @@ class SentinelDownloader:
             
             if matching_features:
                 # Return the first matching feature
-                logger.info(f"Found {len(matching_features)} tiles matching ID: {tile_id}")
+                logging.info(f"Found {len(matching_features)} tiles matching ID: {tile_id}")
                 return matching_features[0]
             else:
-                logger.warning(f"Tile ID {tile_id} not found in search results")
+                logging.warning(f"Tile ID {tile_id} not found in search results")
                 return None
             
         except requests.exceptions.RequestException as e:
-            logger.error(f"Request error: {e}")
+            logging.error(f"Request error: {e}")
             return None
         except Exception as e:
-            logger.error(f"Error searching for tile: {e}")
+            logging.error(f"Error searching for tile: {e}")
             return None
     
-    def download_tile(self, feature, output_dir="downloads"):
+    def download_tile(self, feature : dict, output_dir : str ="downloads"):
         """
         Download a Sentinel-2 tile.
         
         Args:
-            feature (dict): The feature containing the tile information
-            output_dir (str): Directory to save downloaded file
+            feature : The feature containing the tile information
+            output_dir : Directory to save downloaded file
             
         Returns:
-            str: Path to the downloaded file, or None if download failed
+            Path to the downloaded file, or None if download failed
         """
         if not feature:
-            logger.error("Invalid feature")
+            logging.error("Invalid feature")
             return None
         
         # Get the title - it could be directly in the feature or in properties
@@ -282,10 +282,10 @@ class SentinelDownloader:
             title = feature['properties'].get('title')
         
         if not title:
-            logger.error("No title found in feature")
+            logging.error("No title found in feature")
             return None
             
-        logger.info(f"Processing tile: {title}")
+        logging.info(f"Processing tile: {title}")
         
         # Get year and tile ID for directory structure - they could be in feature or properties
         year = feature.get('year')
@@ -329,15 +329,15 @@ class SentinelDownloader:
         # Create hierarchical directory structure if year and tile_id are available
         if year and tile_id:
             nested_dir = os.path.join(output_dir, year, tile_id)
-            logger.info(f"Using hierarchical directory structure: {nested_dir}")
+            logging.info(f"Using hierarchical directory structure: {nested_dir}")
         else:
             # Fallback to output_dir if we can't determine year or tile_id
             nested_dir = output_dir
-            logger.warning("Could not determine hierarchical structure, using base output directory")
+            logging.warning("Could not determine hierarchical structure, using base output directory")
             if not year:
-                logger.warning(f"Could not extract year from title or start_date: {title}, {start_date}")
+                logging.warning(f"Could not extract year from title or start_date: {title}, {start_date}")
             if not tile_id:
-                logger.warning(f"No tile ID available for: {title}")
+                logging.warning(f"No tile ID available for: {title}")
         
         # Create output directory if it doesn't exist
         os.makedirs(nested_dir, exist_ok=True)
@@ -345,23 +345,23 @@ class SentinelDownloader:
         # Define output file path
         output_file = os.path.join(nested_dir, f"{title}.zip")
         
-        logger.info(f"Downloading tile: {title}")
-        logger.info(f"Output file: {output_file}")
+        logging.info(f"Downloading tile: {title}")
+        logging.info(f"Output file: {output_file}")
         
         # Check if the token is valid
         if not self.is_token_valid():
-            logger.info("Token is invalid, attempting to refresh")
+            logging.info("Token is invalid, attempting to refresh")
             # Try to refresh the token before downloading
             try:
                 new_token_data = self.refresh_access_token()
                 if new_token_data:
-                    logger.info("Token refreshed successfully")
+                    logging.info("Token refreshed successfully")
                 else:
-                    logger.warning("Token refresh failed, download may fail")
+                    logging.warning("Token refresh failed, download may fail")
             except Exception as e:
-                logger.error(f"Error refreshing token: {e}")
+                logging.error(f"Error refreshing token: {e}")
         else:
-            logger.info("Token is valid, proceeding with download")
+            logging.info("Token is valid, proceeding with download")
         
         # Get download URL and product ID
         download_url = None
@@ -404,40 +404,40 @@ class SentinelDownloader:
         # 1. Try OData API if we have a product ID
         if product_id:
             odata_url = f"{self.ODATA_URL}/Products({product_id})/$value"
-            logger.info(f"Trying OData API download URL: {odata_url}")
+            logging.info(f"Trying OData API download URL: {odata_url}")
             
             if self._try_download(odata_url, output_file):
                 return output_file
             
-            logger.warning("OData API download failed, trying direct download URL if available")
+            logging.warning("OData API download failed, trying direct download URL if available")
         
         # 2. Try direct download URL if available
         if download_url:
-            logger.info(f"Trying direct download URL: {download_url}")
+            logging.info(f"Trying direct download URL: {download_url}")
             
             if self._try_download(download_url, output_file):
                 return output_file
         else:
-            logger.error("No download URL available for this tile")
+            logging.error("No download URL available for this tile")
             
         # If we get here, all download methods failed or were not available
-        logger.error("All download methods failed or no valid download method available")
+        logging.error("All download methods failed or no valid download method available")
         return None
     
-    def _try_download(self, url, output_file):
+    def _try_download(self, url : str, output_file : str):
         """
         Try to download a file with the current access token.
         
         Args:
-            url (str): URL to download from
-            output_file (str): Path to save the downloaded file
+            url : URL to download from
+            output_file : Path to save the downloaded file
             
         Returns:
-            bool: True if download was successful, False otherwise
+            True if download was successful, False otherwise
         """
         # First check if URL is valid
         if not url:
-            logger.error("No download URL provided")
+            logging.error("No download URL provided")
             return False
             
         try:
@@ -450,11 +450,11 @@ class SentinelDownloader:
             auth_header = headers.get('Authorization', 'None')
             if auth_header != 'None':
                 auth_header = auth_header[:15] + '...' + auth_header[-5:]
-            logger.info(f"Using Authorization header: {auth_header}")
+            logging.info(f"Using Authorization header: {auth_header}")
             
             # Check if the URL is from the catalogue domain and might need redirection
             if 'catalogue.dataspace.copernicus.eu' in url:
-                logger.info("URL is from catalogue domain, checking for redirection")
+                logging.info("URL is from catalogue domain, checking for redirection")
                 
                 # Use a GET request with stream=True to avoid downloading the whole file
                 # but still follow redirects to get the final URL
@@ -466,25 +466,25 @@ class SentinelDownloader:
                 # Check if we were redirected
                 if check_response.history:
                     redirect_url = check_response.url
-                    logger.info(f"Request was redirected to: {redirect_url}")
+                    logging.info(f"Request was redirected to: {redirect_url}")
                     url = redirect_url  # Use the redirected URL for the actual download
                 
                 # Check for authentication issues
                 if check_response.status_code == 401:
-                    logger.warning("Unauthorized: Token may be expired or insufficient permissions")
+                    logging.warning("Unauthorized: Token may be expired or insufficient permissions")
                     return False
             
             # Stream the download to handle large files
-            logger.info(f"Starting download from: {url}")
+            logging.info(f"Starting download from: {url}")
             with requests.get(url, headers=headers, stream=True, allow_redirects=True) as response:
                 if response.status_code == 401:
-                    logger.warning("Unauthorized: Token may be expired or insufficient permissions")
+                    logging.warning("Unauthorized: Token may be expired or insufficient permissions")
                     # Log response headers for debugging
-                    logger.info(f"Response headers: {dict(response.headers)}")
+                    logging.info(f"Response headers: {dict(response.headers)}")
                     return False
                 elif response.status_code == 405:  # Method Not Allowed
-                    logger.warning("Method Not Allowed (405): The server doesn't allow this request method")
-                    logger.info(f"Allowed methods: {response.headers.get('allow', 'Unknown')}")
+                    logging.warning("Method Not Allowed (405): The server doesn't allow this request method")
+                    logging.info(f"Allowed methods: {response.headers.get('allow', 'Unknown')}")
                     
                     # Try alternative URL if this is a download.dataspace.copernicus.eu URL
                     if 'download.dataspace.copernicus.eu' in url:
@@ -494,23 +494,23 @@ class SentinelDownloader:
                         if match:
                             file_id = match.group(1)
                             alt_url = f"https://zipper.dataspace.copernicus.eu/odata/v1/Products({file_id})/$value"
-                            logger.info(f"Trying alternative URL: {alt_url}")
+                            logging.info(f"Trying alternative URL: {alt_url}")
                             
                             # Try the alternative URL
                             return self._try_download(alt_url, output_file)
                     
                     return False
                 elif response.status_code == 404:  # Not Found
-                    logger.error(f"Resource not found (404): The requested URL was not found on the server")
+                    logging.error(f"Resource not found (404): The requested URL was not found on the server")
                     return False
                 elif response.status_code != 200:
-                    logger.error(f"HTTP error: {response.status_code} - {response.reason}")
+                    logging.error(f"HTTP error: {response.status_code} - {response.reason}")
                     return False
                 
                 try:
                     response.raise_for_status()
                 except Exception as e:
-                    logger.error(f"HTTP error: {e}")
+                    logging.error(f"HTTP error: {e}")
                     return False
                 
                 # Get the total file size if available
@@ -521,7 +521,7 @@ class SentinelDownloader:
                     if total_size > 0:
                         # Convert to MB for display
                         total_size_mb = total_size / (1024 * 1024)
-                        logger.info(f"Total file size: {total_size_mb:.2f} MB")
+                        logging.info(f"Total file size: {total_size_mb:.2f} MB")
                         
                         # Create a tqdm progress bar
                         # Use larger chunk size for better performance (1MB instead of 8KB)
@@ -540,36 +540,36 @@ class SentinelDownloader:
                                     # If progress bars are disabled, log progress periodically
                                     if self.disable_progress_bars and total_size > 0 and pbar.n % (10 * 1024 * 1024) < chunk_size:
                                         percent = (pbar.n / total_size) * 100
-                                        logger.info(f"Downloaded: {pbar.n / (1024 * 1024):.2f} MB ({percent:.2f}%)")
+                                        logging.info(f"Downloaded: {pbar.n / (1024 * 1024):.2f} MB ({percent:.2f}%)")
                     else:
                         # If content length is unknown, just download without progress bar
-                        logger.info("Content length unknown, downloading without progress bar")
+                        logging.info("Content length unknown, downloading without progress bar")
                         for chunk in response.iter_content(chunk_size=self.chunk_size):
                             if chunk:
                                 f.write(chunk)
             
-            logger.info(f"Download completed successfully: {output_file}")
+            logging.info(f"Download completed successfully: {output_file}")
             return True
             
         except requests.exceptions.HTTPError as e:
-            logger.error(f"HTTP error: {e}")
+            logging.error(f"HTTP error: {e}")
             # Log response details for debugging
             if hasattr(e, 'response') and e.response is not None:
-                logger.error(f"Response status: {e.response.status_code}")
-                logger.error(f"Response headers: {dict(e.response.headers)}")
-                logger.error(f"Response content: {e.response.text[:500]}...")  # First 500 chars
+                logging.error(f"Response status: {e.response.status_code}")
+                logging.error(f"Response headers: {dict(e.response.headers)}")
+                logging.error(f"Response content: {e.response.text[:500]}...")  # First 500 chars
             return False
         except Exception as e:
-            logger.error(f"Download error: {e}")
+            logging.error(f"Download error: {e}")
             return False
 
-    def download_tiles_from_json(self, json_file, output_dir="downloads"):
+    def download_tiles_from_json(self, json_file : str, output_dir : str ="downloads"):
         """
         Download all Sentinel-2 tiles specified in a JSON file.
         
         Args:
-            json_file (str): Path to the JSON file containing tile information
-            output_dir (str): Directory to save downloaded files
+            json_file : Path to the JSON file containing tile information
+            output_dir x: Directory to save downloaded files
         """
         import json
         

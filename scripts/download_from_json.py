@@ -10,10 +10,10 @@ with year and tile ID.
 import os
 import sys
 import argparse
-import logging as log
+import logging
 from pathlib import Path
 
-log.basicConfig(level=log.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 # Add the project root directory to the Python path
@@ -34,40 +34,40 @@ def main():
     
     # Check if the JSON file exists
     if not os.path.exists(args.json_file):
-        log.error(f"Error: JSON file not found: {args.json_file}")
+        logging.error(f"Error: JSON file not found: {args.json_file}")
         sys.exit(1)
     
     # Always refresh the token before starting
-    log.info("Refreshing token before starting")
+    logging.info("Refreshing token before starting")
     refreshed = get_access_token()
     if refreshed:
-        log.info("Token refreshed successfully")
+        logging.info("Token refreshed successfully")
     else:
-        log.warning("Failed to refresh token, will try to generate a new one")
+        logging.warning("Failed to refresh token, will try to generate a new one")
         # Try to generate a new token
         token_data = ensure_valid_token()
         if token_data:
-            log.info("New token generated successfully")
+            logging.info("New token generated successfully")
         else:
-            log.warning("Failed to generate a new token")
+            logging.warning("Failed to generate a new token")
             sys.exit(1)
     
     # Create the downloader and download tiles
     try:
         downloader = SentinelDownloader()
-        log.info(f"Downloading all tiles from {args.json_file} without any limitations (using hierarchical structure)")
+        logging.info(f"Downloading all tiles from {args.json_file} without any limitations (using hierarchical structure)")
         downloader.download_tiles_from_json(
             args.json_file,
             output_dir=args.output_dir
         )
     except FileNotFoundError as e:
-        log.error(f"Error: {e}")
+        logging.error(f"Error: {e}")
         sys.exit(1)
     except PermissionError as e:
-        log.error(f"Error: {e}")
+        logging.error(f"Error: {e}")
         sys.exit(1)
     except Exception as e:
-        log.error(f"Error: {e}")
+        logging.error(f"Error: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
