@@ -8,10 +8,13 @@ quarterly products and their footprints.
 
 import argparse
 import json
+import logging
 import os
 from datetime import datetime
 from pathlib import Path
 import sys
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Add the project root directory to the Python path
 project_root = str(Path(__file__).parent.parent)
@@ -19,16 +22,16 @@ sys.path.append(project_root)
 
 from src.map_visualizer import create_mosaic_map
 
-def process_quarterly_products(json_file):
+def process_quarterly_products(json_file : str):
     """
     Process the JSON file containing quarterly products and convert it to the format
     expected by the map visualization module.
     
     Args:
-        json_file (str): Path to the JSON file containing quarterly products
+        json_file : Path to the JSON file containing quarterly products
         
     Returns:
-        list: List of results in the format expected by create_mosaic_map
+        List of results in the format expected by create_mosaic_map
     """
     with open(json_file, 'r') as f:
         data = json.load(f)
@@ -75,14 +78,14 @@ def main():
     args = parser.parse_args()
     
     # Process the quarterly products
-    print(f"Processing quarterly products from {args.input_json}")
+    logging.info(f"Processing quarterly products from {args.input_json}")
     results = process_quarterly_products(args.input_json)
     
     # Create the interactive map
-    print(f"Creating interactive map with {len(results)} areas")
+    logging.info(f"Creating interactive map with {len(results)} areas")
     create_mosaic_map(results, args.output_map)
     
-    print(f"\nMap saved to {args.output_map}")
+    logging.info(f"\nMap saved to {args.output_map}")
 
 if __name__ == "__main__":
     main() 

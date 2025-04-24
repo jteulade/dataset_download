@@ -8,7 +8,9 @@ Copernicus Data Space API.
 import os
 import json
 import getpass
+import logging
 import requests
+from requests.exceptions import HTTPError, Timeout, RequestException
 
 # Global constants
 TOKEN_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
@@ -27,8 +29,12 @@ def load_token(token_file=None):
         if os.path.exists(token_path):
             with open(token_path, 'r') as f:
                 return json.load(f)
+    except FileNotFoundError:
+        logging.error(f"Token file not found: {token_path}")
+    except PermissionError:
+        logging.error(f"Permission denied to read token file: {token_path}")
     except (json.JSONDecodeError, IOError) as e:
-        print(f"Error loading token from {token_path}: {e}")
+        logging.error(f"Error loading token from {token_path}: {e}")
     return None
 
 def save_token(token_data, token_file=None):
@@ -39,7 +45,7 @@ def save_token(token_data, token_file=None):
             json.dump(token_data, f)
         return True
     except IOError as e:
-        print(f"Error saving token to {token_path}: {e}")
+        logging.error(f"Error saving token to {token_path}: {e}")
         return False
 
 def get_credentials():
@@ -58,7 +64,7 @@ def generate_token(token_file=None):
     """Generate a new token using credentials."""
     username, password = get_credentials()
     if not username or not password:
-        print("No credentials provided. Token generation canceled.")
+        logging.warning("No credentials provided. Token generation canceled.")
         return None
     
     try:
@@ -69,21 +75,24 @@ def generate_token(token_file=None):
                 "username": username,
                 "password": password,
                 "grant_type": "password"
-            }
+            },
+            timeout=10  # Setting a timeout of 10 seconds to avoid the request hanging indefinitely
         )
+        response.raise_for_status()
+
+        if response.headers.get('Content-Type') != 'application/json':
+            logging.error(f"Unexpected content type: {response.headers.get('Content-Type')}")
+            return None  
+        token_data = response.json()
+
+        # Save the token data to the specified file
+        if save_token(token_data, token_file):
+            logging.info(f"Token generated successfully and saved to {get_token_path(token_file)}")
+            logging.warning(f"Token will expire in {token_data.get('expires_in', 'unknown')} seconds")
+        return token_data
         
-        if response.status_code == 200:
-            token_data = response.json()
-            if save_token(token_data, token_file):
-                print(f"Token generated successfully and saved to {get_token_path(token_file)}")
-                print(f"Token will expire in {token_data.get('expires_in', 'unknown')} seconds")
-            return token_data
-        else:
-            print(f"Failed to generate token: {response.status_code} {response.reason}")
-            if response.text:
-                print(f"Response: {response.text}")
-    except Exception as e:
-        print(f"Error generating token: {e}")
+    except (HTTPError , RequestException, Exception) as e:
+       logging.error(f"Error generating token: {e}")
     return None
 
 def refresh_token(token_data=None, token_file=None):
@@ -103,28 +112,29 @@ def refresh_token(token_data=None, token_file=None):
                 "grant_type": "refresh_token"
             }
         )
-        
-        if response.status_code == 200:
-            new_token_data = response.json()
-            if save_token(new_token_data, token_file):
-                print("Token refreshed successfully")
-                print(f"New token will expire in {new_token_data.get('expires_in', 'unknown')} seconds")
-            return new_token_data
-        else:
-            print(f"Failed to refresh token: {response.status_code} {response.reason}")
-            return generate_token(token_file)
-    except Exception as e:
-        print(f"Error refreshing token: {e}")
+        response.raise_for_status()
+        if response.headers.get('Content-Type') != 'application/json':
+            logging.error(f"Unexpected content type: {response.headers.get('Content-Type')}")
+            return None
+        new_token_data = response.json()
+        if save_token(new_token_data, token_file):
+            logging.info("Token refreshed successfully")
+            logging.warning(f"New token will expire in {new_token_data.get('expires_in', 'unknown')} seconds")
+        return new_token_data
+    
+
+    except (HTTPError , RequestException,Timeout, Exception) as e:
+        logging.error(f"Error refreshing token: {e}")
         return generate_token(token_file)
 
 def ensure_valid_token(token_file=None):
     """Ensure a valid token is available, generating or refreshing if needed."""
     token_data = load_token(token_file)
     if token_data is None:
-        print("No token found. Generating a new token...")
+        logging.warning("No token found. Generating a new token...")
         return generate_token(token_file)
     else:
-        print("Refreshing token...")
+        logging.warning("Refreshing token...")
         return refresh_token(token_data, token_file)
 
 def get_access_token(token_file=None):

@@ -7,17 +7,37 @@ A simple tool to explore Sentinel-2 data for cities and download Sentinel-2 tile
 - Python 3.6 or higher
 - Required Python packages: see `requirements.txt`
 
-## Installation
+##  Installation
 
-1. Clone or download this repository
-2. Install the required packages:
-   ```
-   pip install -r requirements.txt
-   ```
-3. Make the scripts executable:
-   ```
-   chmod +x scripts/*.py
-   ```
+### 1.  Clone or Download this Repository
+
+Clone the repository via Git or download it manually:
+
+```bash
+git clone git@github.com:jteulade/dataset_download.git
+cd dataset_download
+```
+
+---
+
+### 2. Install the Required Dependencies
+
+To install the required dependencies, you need to use Conda. Follow the instructions to install Conda from the official website:
+
+https://www.anaconda.com/download/success
+
+Once Conda is installed, run the following command to install the dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+---
+
+### 3. Make the Scripts Executable (Linux/macOS Only)
+
+```bash
+chmod +x scripts/*.py
+```
 
 ## Authentication
 
@@ -43,6 +63,10 @@ This script downloads Natural Earth land polygons at 1:110m scale, which are use
 python scripts/download_land_polygons.py
 ```
 
+#### Key Arguments
+
+- `--output-dir`: Directory to save output files (default: "data")
+
 The script will download the land polygons to the `data` directory in your project root.
 
 ### 2. City Explorer (`scripts/sentinel_city_explorer.py`)
@@ -61,7 +85,7 @@ python scripts/sentinel_city_explorer.py --cities-csv worldcities.csv --num-citi
 - `--num-cities`: Number of cities to select (default: 20)
 - `--population-min`: Minimum population threshold for cities (default: 500000)
 - `--output-dir`: Directory to save output files (default: "results")
-- `--year-filter`: Year to filter for (default: "2023")
+- `--year-filter`: Year to filter for (default: "2023", min 2015)
 - `--random-distance`: Distance in kilometers for random points from cities (default: 300)
 - `--ensure-on-land`: Only generate random points on land (default: True)
 - `--max-land-attempts`: Maximum attempts to find a random point on land (default: 10)
@@ -103,11 +127,26 @@ python scripts/visualize_quarterly_products.py --input-json results/your_generat
 - `--input-json`: Path to the JSON file containing quarterly products (required)
 - `--output-map`: Path to save the HTML map file (default: "maps/quarterly_products_map.html")
 
+This is an example of the map you can have with 5 cities : 
+
+![example](./ressources/example_map.png)
 ## Example Workflow
 
 1. Download land polygons (if not already downloaded):
    ```bash
    python scripts/download_land_polygons.py
+   ```
+
+   This is the directory data you will have :
+
+   ```bash
+   ├── ne_110m_land.cpg
+   ├── ne_110m_land.dbf
+   ├── ne_110m_land.prj
+   ├── ne_110m_land.README.html
+   ├── ne_110m_land.shp
+   ├── ne_110m_land.shx
+   └── ne_110m_land.VERSION.txt
    ```
 
 2. Run the city explorer to find Sentinel-2 data:

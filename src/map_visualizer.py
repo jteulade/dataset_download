@@ -11,6 +11,7 @@ import random
 import os
 from shapely.geometry import Polygon, Point
 import math
+import logging
 
 def haversine_distance(point1, point2):
     """
@@ -36,24 +37,24 @@ def haversine_distance(point1, point2):
     r = 6371  # Radius of Earth in kilometers
     return c * r
 
-def create_mosaic_map(cities_results, output_file='maps/city_mosaics_map.html'):
+def create_mosaic_map(cities_results : list, output_file : str ='maps/city_mosaics_map.html'):
     """
     Create an interactive map showing cities and their associated Sentinel-2 mosaic tiles.
     
     Args:
-        cities_results (list): List of dictionaries containing query results for each city
-        output_file (str): Path to save the HTML map file
+        cities_results : List of dictionaries containing query results for each city
+        output_file : Path to save the HTML map file
         
     Returns:
-        str: Path to the saved HTML map file
+        Path to the saved HTML map file
     """
-    print(f"Creating interactive map with {len(cities_results)} cities and their Sentinel-2 tiles")
+    logging.info(f"Creating interactive map with {len(cities_results)} cities and their Sentinel-2 tiles")
     
     # Create a map centered at the average of all coordinates
     valid_coords = [(r['lat'], r['lon']) for r in cities_results if r['count'] > 0]
     
     if not valid_coords:
-        print("No valid coordinates with Sentinel-2 data found")
+        logging.warning("No valid coordinates with Sentinel-2 data found")
         return None
     
     avg_lat = sum(lat for lat, _ in valid_coords) / len(valid_coords)
@@ -305,7 +306,7 @@ def create_mosaic_map(cities_results, output_file='maps/city_mosaics_map.html'):
                     else:
                         continue
                 
-                # Store the footprint source for logging (without warnings)
+                # Store the footprint source for logging.ing (without warnings)
                 feature['footprint_source'] = footprint_source
                 
                 # Check if the point is within the polygon
@@ -336,7 +337,7 @@ def create_mosaic_map(cities_results, output_file='maps/city_mosaics_map.html'):
                         # Store the distance instead of printing it
                         feature['distance_to_footprint'] = distance_to_tile
                 except Exception as e:
-                    print(f"Error checking if point is in polygon: {e}")
+                    logging.error(f"Error checking if point is in polygon: {e}")
                 
                 # Choose a color and style based on the index and whether it's a random point
                 if is_random_point:
@@ -365,7 +366,7 @@ def create_mosaic_map(cities_results, output_file='maps/city_mosaics_map.html'):
                                 dash_array='3, 3'
                             ).add_to(tile_group)
                         except Exception as e:
-                            print(f"Error creating distance line: {e}")
+                            logging.error(f"Error creating distance line: {e}")
                     else:
                         color = base_color
                         dash_array = 'none'
@@ -446,8 +447,8 @@ def create_mosaic_map(cities_results, output_file='maps/city_mosaics_map.html'):
                     opacity=0.5,
                     dash_array='3, 5'
                 ).add_to(connection_group)
-            except Exception as e:
-                print(f"Error processing tile {feature.get('title', 'Unknown')}: {e}")
+            except (KeyError, ValueError, TypeError, Exception) as e:
+                logging.error(f"Error processing tile {feature.get('title', 'Unknown')}: {e}")
     
     # Add layer control
     folium.LayerControl().add_to(m)
@@ -457,6 +458,6 @@ def create_mosaic_map(cities_results, output_file='maps/city_mosaics_map.html'):
     
     # Save the map
     m.save(output_file)
-    print(f"Interactive map saved to {output_file}")
+    logging.info(f"Interactive map saved to {output_file}")
     
     return output_file
