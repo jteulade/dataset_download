@@ -77,7 +77,42 @@ def parse_arguments():
     parser.add_argument("--random-seed", type=int, default=None,
                         help="Random seed for reproducible results")
     
-    return parser.parse_args()
+    args=  parser.parse_args()
+
+      # Validate arguments
+    if not os.path.isfile(args.cities_csv):
+        logging.error(f"Cities CSV file not found: {args.cities_csv}")
+        sys.exit(1)
+
+    if args.num_cities <= 0:
+        logging.error("Number of cities (--num-cities) must be greater than 0.")
+        sys.exit(1)
+
+    if args.population_min < 0:
+        logging.error("Minimum population (--population-min) cannot be negative.")
+        sys.exit(1)
+
+    if args.random_distance <= 0:
+        logging.error("Random distance (--random-distance) must be greater than 0.")
+        sys.exit(1)
+
+    if args.max_land_attempts <= 0:
+        logging.error("Maximum land attempts (--max-land-attempts) must be greater than 0.")
+        sys.exit(1)
+
+    if args.min_city_distance <= 0:
+        logging.error("Minimum city distance (--min-city-distance) must be greater than 0.")
+        sys.exit(1)
+
+    if not os.path.exists(args.output_dir):
+        try:
+            os.makedirs(args.output_dir)
+            logging.info(f"Created output directory: {args.output_dir}")
+        except Exception as e:
+            logging.error(f"Failed to create output directory: {args.output_dir}. Error: {e}")
+            sys.exit(1)
+
+    return args
 
 def get_city_tile_info(result: dict):
     """Extract tile ID, coordinates and footprint information from query result
@@ -283,39 +318,6 @@ def save_results(unified_result : dict, output_dir: str, year_filter: str):
 def main():
     # Parse arguments
     args = parse_arguments()
-    
-    # Validate arguments
-    if not os.path.isfile(args.cities_csv):
-        logging.error(f"Cities CSV file not found: {args.cities_csv}")
-        sys.exit(1)
-
-    if args.num_cities <= 0:
-        logging.error("Number of cities (--num-cities) must be greater than 0.")
-        sys.exit(1)
-
-    if args.population_min < 0:
-        logging.error("Minimum population (--population-min) cannot be negative.")
-        sys.exit(1)
-
-    if args.random_distance <= 0:
-        logging.error("Random distance (--random-distance) must be greater than 0.")
-        sys.exit(1)
-
-    if args.max_land_attempts <= 0:
-        logging.error("Maximum land attempts (--max-land-attempts) must be greater than 0.")
-        sys.exit(1)
-
-    if args.min_city_distance <= 0:
-        logging.error("Minimum city distance (--min-city-distance) must be greater than 0.")
-        sys.exit(1)
-
-    if not os.path.exists(args.output_dir):
-        try:
-            os.makedirs(args.output_dir)
-            logging.info(f"Created output directory: {args.output_dir}")
-        except Exception as e:
-            logging.error(f"Failed to create output directory: {args.output_dir}. Error: {e}")
-            sys.exit(1)
 
     if not args.year_filter.isdigit() or len(args.year_filter) != 4:
         logging.error("Year filter (--year-filter) must be a valid 4-digit year (e.g., '2023').")
@@ -415,7 +417,7 @@ def main():
         water_percent = 0
         skipped_percent = 0
     
-    logging.info(f"\n=== Summary ===")
+    print(f"\n=== Summary ===")
     logging.info(f"- Selected {len(selected_cities)} dispersed cities")
     logging.info(f"- Total Sentinel-2 Global Mosaic areas: {unified_result['properties']['totalAreas']}")
     logging.info(f"- Total Sentinel-2 Global Mosaic products: {unified_result['properties']['totalProducts']}")
@@ -424,10 +426,11 @@ def main():
     logging.info(f"- Random points skipped: {skipped_random_points} ({skipped_percent:.1f}% of attempted points)")
     logging.info(f"- Unified JSON saved to {unified_file}")
     
-    logging.info("\n=== Process Complete ===")
+    print(f"\n=== Process Complete ===")
     logging.info(f"You can now use the download_from_json.py script to download the tiles:")
     logging.info(f"python scripts/download_from_json.py --json-file {unified_file} --output-dir downloads")
-    logging.info(f"\nTo visualize the results, use visualize_quarterly_products.py:")
+    print(f"\n")
+    logging.info(f"To visualize the results, use visualize_quarterly_products.py:")
     logging.info(f"python scripts/visualize_quarterly_products.py --input-json {unified_file}")
     
 if __name__ == "__main__":
