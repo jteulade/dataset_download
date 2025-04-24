@@ -11,6 +11,7 @@ import random
 import os
 from shapely.geometry import Polygon, Point
 import math
+import logging as log
 
 def haversine_distance(point1, point2):
     """
@@ -47,13 +48,13 @@ def create_mosaic_map(cities_results, output_file='maps/city_mosaics_map.html'):
     Returns:
         str: Path to the saved HTML map file
     """
-    print(f"Creating interactive map with {len(cities_results)} cities and their Sentinel-2 tiles")
+    log.INFO(f"Creating interactive map with {len(cities_results)} cities and their Sentinel-2 tiles")
     
     # Create a map centered at the average of all coordinates
     valid_coords = [(r['lat'], r['lon']) for r in cities_results if r['count'] > 0]
     
     if not valid_coords:
-        print("No valid coordinates with Sentinel-2 data found")
+        log.WARNING("No valid coordinates with Sentinel-2 data found")
         return None
     
     avg_lat = sum(lat for lat, _ in valid_coords) / len(valid_coords)
@@ -336,7 +337,7 @@ def create_mosaic_map(cities_results, output_file='maps/city_mosaics_map.html'):
                         # Store the distance instead of printing it
                         feature['distance_to_footprint'] = distance_to_tile
                 except Exception as e:
-                    print(f"Error checking if point is in polygon: {e}")
+                    log.error(f"Error checking if point is in polygon: {e}")
                 
                 # Choose a color and style based on the index and whether it's a random point
                 if is_random_point:
@@ -365,7 +366,7 @@ def create_mosaic_map(cities_results, output_file='maps/city_mosaics_map.html'):
                                 dash_array='3, 3'
                             ).add_to(tile_group)
                         except Exception as e:
-                            print(f"Error creating distance line: {e}")
+                            log.error(f"Error creating distance line: {e}")
                     else:
                         color = base_color
                         dash_array = 'none'
@@ -447,13 +448,13 @@ def create_mosaic_map(cities_results, output_file='maps/city_mosaics_map.html'):
                     dash_array='3, 5'
                 ).add_to(connection_group)
             except KeyError as e:
-                print(f"KeyError processing tile {feature.get('title', 'Unknown')}: {e}")
+                log.error(f"KeyError processing tile {feature.get('title', 'Unknown')}: {e}")
             except ValueError as e:
-                print(f"ValueError processing tile {feature.get('title', 'Unknown')}: {e}")
+                log.error(f"ValueError processing tile {feature.get('title', 'Unknown')}: {e}")
             except TypeError as e:
-                print(f"TypeError processing tile {feature.get('title', 'Unknown')}: {e}")
+                log.error(f"TypeError processing tile {feature.get('title', 'Unknown')}: {e}")
             except Exception as e:
-                print(f"Error processing tile {feature.get('title', 'Unknown')}: {e}")
+                log.error(f"Error processing tile {feature.get('title', 'Unknown')}: {e}")
     
     # Add layer control
     folium.LayerControl().add_to(m)
@@ -463,6 +464,6 @@ def create_mosaic_map(cities_results, output_file='maps/city_mosaics_map.html'):
     
     # Save the map
     m.save(output_file)
-    print(f"Interactive map saved to {output_file}")
+    log.info(f"Interactive map saved to {output_file}")
     
     return output_file
